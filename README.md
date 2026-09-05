@@ -54,3 +54,57 @@ BankPrismUI/
 │       └── main.cpp                 # SKSE C++ 플러그인 메인
 └── README.md                        # 본 문서
 ```
+
+## Building
+
+The mod is produced entirely from the command line; the Creation Kit is never opened.
+
+### 1. Plugin (`BankPrismUI.esp`)
+
+```
+cd EspGenerator && dotnet run
+```
+
+`EspGenerator` uses Mutagen to write the globals, the controller quest and the
+steward dialogue, then reads the file back and prints what it wrote. Two things
+are easy to get wrong here and are deliberately handled in code:
+
+- `Global` is abstract in Mutagen, so `Globals.AddNew()` throws at runtime.
+  `GlobalFloat` is constructed directly instead.
+- Mutagen defaults to Windows-1252, which replaces every Hangul character with
+  `?`. Strings are written as UTF-8, matching the Korean translation mods in
+  this setup.
+
+### 2. Papyrus scripts
+
+```
+"C:\TAKEALOOK\mods\Creation Kit\Root\Papyrus Compiler\PapyrusCompiler.exe" ^
+  "C:\TAKEALOOK\BankPrismUI\Scripts\Source" -all ^
+  -f="C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts\TESV_Papyrus_Flags.flg" ^
+  -i="C:\TAKEALOOK\BankPrismUI\Scripts\Source;C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts;C:\TAKEALOOK\mods\Skyrim Script Extender (SKSE64)\Scripts\Source" ^
+  -o="C:\TAKEALOOK\BankPrismUI\Scripts"
+```
+
+### 3. SKSE plugin (`BankPrismNative.dll`)
+
+Requires Visual Studio 2026 Build Tools and CommonLibSSE-NG. The library is
+vendored at `SKSE_Source/extern/CommonLibSSE-NG` and kept out of git; copy it
+from a project that already has it, or clone CommonLibSSE-NG there.
+
+```
+cd SKSE_Source
+cmake -B build -G "Visual Studio 18 2026" -A x64
+cmake --build build --config Release
+```
+
+The build copies the DLL into `SKSE/Plugins/` so the game can never load a stale
+one from a previous build.
+
+### 4. Deploy to Mod Organizer 2
+
+```
+powershell -File deploy.ps1
+```
+
+Copies the runtime files to `C:\TAKEALOOK\mods\BankPrismUI`. Enabling the mod
+and the plugin in Mod Organizer 2 is done in its interface.

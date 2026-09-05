@@ -4,3 +4,10 @@ EspGenerator/obj/
 
 # Papyrus build output
 *.pex
+
+# C++ build output
+SKSE_Source/build/
+SKSE/Plugins/*.dll
+
+# Third-party source, vendored locally (see README "Building")
+SKSE_Source/extern/
