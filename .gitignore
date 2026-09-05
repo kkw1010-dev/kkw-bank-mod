@@ -1,0 +1,6 @@
+# .NET build output
+EspGenerator/bin/
+EspGenerator/obj/
+
+# Papyrus build output
+*.pex
