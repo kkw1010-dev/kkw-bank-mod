@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; background: transparent; color: #ddd; font-family: 'Malgun Gothic', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    
+    .bank-panel { 
+      background: rgba(20, 24, 30, 0.95); 
+      border: 2px solid rgba(212, 175, 55, 0.5); 
+      border-radius: 8px; 
+      padding: 24px; 
+      width: 400px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); 
+      backdrop-filter: blur(5px); 
+    }
+    
+    .title { text-align: center; color: #d4af37; font-size: 20px; margin-bottom: 20px; font-weight: bold; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 10px; }
+    
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 15px; }
+    .stat-name { color: #aaa; }
+    .stat-value { color: #fff; font-weight: bold; }
+    .stat-value.negative { color: #ff6b6b; }
+    
+    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 25px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 20px; }
+    .action-btn { background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s; }
+    .action-btn:hover { background: rgba(212, 175, 55, 0.3); color: #fff; }
+    .action-btn.close-btn { background: rgba(255, 255, 255, 0.05); color: #ccc; border-color: rgba(255, 255, 255, 0.2); }
+    .action-btn.close-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="bank-panel" id="bankPanel">
+  <div class="title">은행 및 외상 관리</div>
+
+  <div class="content" id="paramContainer">
+    <div class="stat-row">
+      <span class="stat-name">내 지갑 잔고:</span>
+      <span class="stat-value" id="valWallet">0 G</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-name">은행 예금 잔고:</span>
+      <span class="stat-value" id="valBalance">0 G</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-name">상인 외상금 (마이너스):</span>
+      <span class="stat-value negative" id="valCreditDebt">0 G</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-name">은행 대출금:</span>
+      <span class="stat-value negative" id="valDebt">0 G</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="action-btn" onclick="sendAction('payCredit')">상인 외상값 상환하기</button>
+    <button class="action-btn" onclick="sendAction('sellBond')">채권 매각 (서드파티 연동)</button>
+    <button class="action-btn close-btn" onclick="sendAction('close')">닫기</button>
+  </div>
+</div>
+
+<script>
+  function sendAction(actionName) {
+    if (typeof window.chrome !== 'undefined' && window.chrome.webview) {
+      window.chrome.webview.postMessage(actionName);
+    } else if (typeof window.bankAction === 'function') {
+      window.bankAction(actionName); // Fallback if using old binding style
+    } else {
+      console.log("Action triggered:", actionName);
+    }
+  }
+
+  window.bankUpdateParams = (jsonString) => {
+    try {
+      const data = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+      
+      if (data.balance !== undefined) document.getElementById('valBalance').innerText = data.balance + " G";
+      if (data.debt !== undefined) document.getElementById('valDebt').innerText = data.debt + " G";
+      if (data.creditDebt !== undefined) document.getElementById('valCreditDebt').innerText = data.creditDebt + " G";
+      
+    } catch (e) {
+      console.error("Failed to parse bank params", e);
+    }
+  };
+</script>
+</body>
+</html>
