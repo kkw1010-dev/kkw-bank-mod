@@ -41,14 +41,14 @@ namespace ViewState {
 namespace BankPrismNative {
     
     // Dispatch Action to Papyrus via ModEvent
-    void DispatchAction(const std::string& a_action) {
-        SKSE::GetTaskInterface()->AddTask([a_action]() {
+    void DispatchAction(const std::string& a_action, float a_numArg = 0.0f) {
+        SKSE::GetTaskInterface()->AddTask([a_action, a_numArg]() {
             auto* dispatcher = SKSE::GetModCallbackEventSource();
             if (!dispatcher) return;
             SKSE::ModCallbackEvent event;
             event.eventName = "BankPrismAction"; // Must match RegisterForModEvent in Papyrus
             event.strArg = RE::BSFixedString(a_action.c_str());
-            event.numArg = 0.0f;
+            event.numArg = a_numArg;
             event.sender = nullptr;
             dispatcher->SendEvent(&event);
         });
@@ -56,7 +56,21 @@ namespace BankPrismNative {
 
     // Callback when JS calls window.chrome.webview.postMessage("...")
     void OnJSAction(const char* argument) {
-        std::string act = argument ? argument : "";
+        std::string rawMsg = argument ? argument : "";
+        
+        // Parse "action:amount" format
+        std::string act = rawMsg;
+        float amount = 0.0f;
+        
+        size_t colonPos = rawMsg.find(':');
+        if (colonPos != std::string::npos) {
+            act = rawMsg.substr(0, colonPos);
+            try {
+                amount = std::stof(rawMsg.substr(colonPos + 1));
+            } catch (...) {
+                amount = 0.0f;
+            }
+        }
 
         if (act == "close") {
             SKSE::GetTaskInterface()->AddTask([]() {
@@ -66,7 +80,7 @@ namespace BankPrismNative {
             });
         }
         
-        DispatchAction(act);
+        DispatchAction(act, amount);
     }
 
     // Callback when HTML finishes loading

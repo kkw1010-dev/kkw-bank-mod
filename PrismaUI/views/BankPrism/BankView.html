@@ -22,17 +22,49 @@
     .stat-value { color: #fff; font-weight: bold; }
     .stat-value.negative { color: #ff6b6b; }
     
-    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 25px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 20px; }
-    .action-btn { background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s; }
+    .input-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .amount-input {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      color: #fff;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 16px;
+      text-align: right;
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
+    }
+    
+    .amount-input:focus {
+      border-color: #d4af37;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .action-btn { flex: 1; background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s; }
     .action-btn:hover { background: rgba(212, 175, 55, 0.3); color: #fff; }
     .action-btn.close-btn { background: rgba(255, 255, 255, 0.05); color: #ccc; border-color: rgba(255, 255, 255, 0.2); }
     .action-btn.close-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+    
+    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px; }
   </style>
 </head>
 <body>
 
 <div class="bank-panel" id="bankPanel">
-  <div class="title">은행 및 외상 관리</div>
+  <div class="title">화이트런 은행 업무</div>
 
   <div class="content" id="paramContainer">
     <div class="stat-row">
@@ -47,27 +79,48 @@
       <span class="stat-name">상인 외상금 (마이너스):</span>
       <span class="stat-value negative" id="valCreditDebt">0 G</span>
     </div>
-    <div class="stat-row">
-      <span class="stat-name">은행 대출금:</span>
-      <span class="stat-value negative" id="valDebt">0 G</span>
+  </div>
+
+  <div class="input-section">
+    <input type="number" id="amountInput" class="amount-input" placeholder="금액 입력" min="0">
+    <div class="btn-row">
+      <button class="action-btn" onclick="handleTransaction('deposit')">입금하기</button>
+      <button class="action-btn" onclick="handleTransaction('withdraw')">출금하기</button>
     </div>
   </div>
 
   <div class="actions">
-    <button class="action-btn" onclick="sendAction('payCredit')">상인 외상값 상환하기</button>
+    <button class="action-btn" onclick="sendAction('payCredit')">상인 외상값 일시불 상환</button>
     <button class="action-btn" onclick="sendAction('sellBond')">채권 매각 (서드파티 연동)</button>
     <button class="action-btn close-btn" onclick="sendAction('close')">닫기</button>
   </div>
 </div>
 
 <script>
-  function sendAction(actionName) {
+  function sendAction(actionName, amount = 0) {
+    let payload = actionName;
+    if (amount > 0) {
+      payload = actionName + ":" + amount;
+    }
+    
     if (typeof window.chrome !== 'undefined' && window.chrome.webview) {
-      window.chrome.webview.postMessage(actionName);
+      window.chrome.webview.postMessage(payload);
     } else if (typeof window.bankAction === 'function') {
-      window.bankAction(actionName); // Fallback if using old binding style
+      window.bankAction(payload);
     } else {
-      console.log("Action triggered:", actionName);
+      console.log("Action triggered:", payload);
+    }
+  }
+
+  function handleTransaction(type) {
+    const input = document.getElementById('amountInput');
+    const amount = parseInt(input.value);
+    
+    if (!isNaN(amount) && amount > 0) {
+      sendAction(type, amount);
+      input.value = ""; // 초기화
+    } else {
+      alert("올바른 금액을 입력해주세요.");
     }
   }
 
@@ -75,8 +128,8 @@
     try {
       const data = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
       
+      if (data.wallet !== undefined) document.getElementById('valWallet').innerText = data.wallet + " G";
       if (data.balance !== undefined) document.getElementById('valBalance').innerText = data.balance + " G";
-      if (data.debt !== undefined) document.getElementById('valDebt').innerText = data.debt + " G";
       if (data.creditDebt !== undefined) document.getElementById('valCreditDebt').innerText = data.creditDebt + " G";
       
     } catch (e) {
