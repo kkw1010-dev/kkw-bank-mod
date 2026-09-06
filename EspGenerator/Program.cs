@@ -31,6 +31,89 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "ordiff")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                void Dump(string tag, IConditionGetter c)
+                {
+                    var cf = c as IConditionFloatGetter;
+                    var gf = c.Data as IGetInFactionConditionDataGetter;
+                    Console.WriteLine($"    {tag} flags={c.Flags} op={c.CompareOperator} value={cf?.ComparisonValue}");
+                    Console.WriteLine($"        data={c.Data.GetType().Name} runOn={c.Data.RunOnType} refr={c.Data.Reference.FormKeyNullable} idx={c.Data.RunOnTypeIndex}");
+                    if (gf != null) Console.WriteLine($"        faction={gf.Faction.Link.FormKeyNullable}");
+                }
+
+                Console.WriteLine("=== 바닐라: OR 플래그를 쓰는 대화문 INFO ===");
+                int shown = 0;
+                foreach (var d in esm.DialogTopics)
+                {
+                    foreach (var r in d.Responses)
+                    {
+                        if (r.Conditions.Count < 2) continue;
+                        if (!r.Conditions.Any(c => c.Flags.HasFlag(Condition.Flag.OR))) continue;
+                        if (!r.Conditions.Any(c => c.Data is IGetInFactionConditionDataGetter)) continue;
+
+                        Console.WriteLine($"  DIAL {d.FormKey.ID:X6} {d.EditorID} / INFO {r.FormKey.ID:X6} ({r.Conditions.Count} conditions)");
+                        foreach (var c in r.Conditions) Dump("cond", c);
+                        if (++shown >= 2) break;
+                    }
+                    if (shown >= 2) break;
+                }
+                if (shown == 0) Console.WriteLine("  (해당 사례 없음)");
+
+                Console.WriteLine();
+                Console.WriteLine("=== 우리 ESP ===");
+                using var ours = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/BankPrismUI/BankPrismUI.esp", SkyrimRelease.SkyrimSE);
+                foreach (var d in ours.DialogTopics)
+                    foreach (var r in d.Responses)
+                    {
+                        Console.WriteLine($"  {d.EditorID} / {r.EditorID} ({r.Conditions.Count} conditions)");
+                        foreach (var c in r.Conditions) Dump("cond", c);
+                    }
+                return;
+            }
+
+            if (args.Length > 0 && args[0] == "ranks")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                void Show(uint facId, string label, uint npcId, string npcLabel)
+                {
+                    var fk = new FormKey(new ModKey("Skyrim", ModType.Master), facId);
+                    var nk = new FormKey(new ModKey("Skyrim", ModType.Master), npcId);
+                    var npc = esm.Npcs.FirstOrDefault(n => n.FormKey == nk);
+                    var f = esm.Factions.FirstOrDefault(x => x.FormKey == fk);
+                    var rank = npc?.Factions.FirstOrDefault(fr => fr.Faction.FormKeyNullable == fk);
+                    Console.WriteLine($"{label} [{facId:X6}] flags={f?.Flags}");
+                    Console.WriteLine($"    {npcLabel} rank={(rank == null ? "(미소속)" : rank.Rank.ToString())}");
+                    Console.WriteLine($"    faction ranks defined: {f?.Ranks.Count}");
+                }
+
+                Show(0x050922, "JobStewardFaction", 0x013BBA, "Proventus");
+                Show(0x09CAF5, "ServicesWhiterunBelethorsGoods", 0x013BA1, "Belethor");
+                Show(0x05A665, "ServicesRiverwoodRiverwoodTrader", 0x01347A, "Lucan");
+
+                Console.WriteLine();
+                Console.WriteLine("--- 바닐라가 판매 팩션을 조건으로 쓰는 사례 ---");
+                var target = new FormKey(new ModKey("Skyrim", ModType.Master), 0x09CAF5);
+                int found = 0;
+                foreach (var d in esm.DialogTopics)
+                    foreach (var r in d.Responses)
+                        foreach (var c in r.Conditions)
+                            if (c.Data is IGetInFactionConditionDataGetter g &&
+                                g.Faction.Link.FormKeyNullable == target)
+                            {
+                                Console.WriteLine($"  DIAL {d.FormKey.ID:X6} {d.EditorID} / INFO {r.FormKey.ID:X6}");
+                                found++;
+                            }
+                Console.WriteLine($"  벨레쏘어 판매팩션을 GetInFaction 조건으로 쓰는 바닐라 대화문: {found}건");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "credit")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -585,18 +668,24 @@ namespace EspGenerator
                 });
 
                 // Conditioning on the faction rather than the actor survives NPC overhauls
-                // that replace the record. Alternatives are OR'd: every clause but the last
-                // carries the OR flag, which is how Skyrim groups them.
-                for (int i = 0; i < factions.Length; i++)
+                // that replace the record.
+                //
+                // Every member of an OR group carries the OR flag, the last one included.
+                // Vanilla INFOs look like this, e.g. 000E3D: one plain condition followed
+                // by four that all carry OR. Clearing the flag on the final clause instead
+                // makes the engine read it as "(any of the rest) AND (that one)", which no
+                // actor can satisfy, and the topic silently reaches nobody.
+                var orGroup = factions.Length > 1;
+                foreach (var faction in factions)
                 {
                     var inFaction = new GetInFactionConditionData();
-                    inFaction.Faction.Link.SetTo(factions[i]);
+                    inFaction.Faction.Link.SetTo(faction);
                     info.Conditions.Add(new ConditionFloat
                     {
                         CompareOperator = CompareOperator.EqualTo,
                         ComparisonValue = 1f,
                         Data = inFaction,
-                        Flags = i < factions.Length - 1 ? Condition.Flag.OR : default
+                        Flags = orGroup ? Condition.Flag.OR : default
                     });
                 }
 
