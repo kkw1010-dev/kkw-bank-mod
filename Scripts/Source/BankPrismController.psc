@@ -36,12 +36,18 @@ EndFunction
 
 ; Pushes the current figures to the view, optionally with a status line.
 Function Refresh(String asMessage)
+    RefreshTx(asMessage, "", 0)
+EndFunction
+
+; As Refresh, but also reports a completed transaction so the view can log it.
+; txType is empty for anything that did not move gold.
+Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
     Int playerGold = 0
     If Gold001
         playerGold = Game.GetPlayer().GetItemCount(Gold001)
     EndIf
 
-    String jsonPayload = "{\"wallet\":" + playerGold         + ", \"balance\":" + GetGlobalInt(BankBalance)         + ", \"debt\":" + GetGlobalInt(BankDebt)         + ", \"creditDebt\":" + GetGlobalInt(MerchantCreditDebt)         + ", \"message\":\"" + asMessage + "\"}"
+    String jsonPayload = "{\"wallet\":" + playerGold         + ", \"balance\":" + GetGlobalInt(BankBalance)         + ", \"debt\":" + GetGlobalInt(BankDebt)         + ", \"creditDebt\":" + GetGlobalInt(MerchantCreditDebt)         + ", \"txType\":\"" + asTxType + "\""         + ", \"txAmount\":" + aiTxAmount         + ", \"message\":\"" + asMessage + "\"}"
 
     BankPrismNative.UpdateParams(jsonPayload)
 EndFunction
@@ -62,7 +68,7 @@ Function Deposit(Int aiAmount, Int aiPlayerGold)
         ; failed check destroyed the player's gold without crediting the account.
         Game.GetPlayer().RemoveItem(Gold001, aiAmount, True)
         BankBalance.SetValueInt(BankBalance.GetValueInt() + aiAmount)
-        Refresh(aiAmount + " 골드를 입금했습니다.")
+        RefreshTx(aiAmount + " 골드를 입금했습니다.", "deposit", aiAmount)
     EndIf
 EndFunction
 
@@ -76,7 +82,7 @@ Function Withdraw(Int aiAmount)
     Else
         BankBalance.SetValueInt(BankBalance.GetValueInt() - aiAmount)
         Game.GetPlayer().AddItem(Gold001, aiAmount, True)
-        Refresh(aiAmount + " 골드를 출금했습니다.")
+        RefreshTx(aiAmount + " 골드를 출금했습니다.", "withdraw", aiAmount)
     EndIf
 EndFunction
 
@@ -120,9 +126,9 @@ Function PayMerchantCredit(Int aiPlayerGold)
     MerchantCreditDebt.SetValueInt(owed - paid)
 
     If owed - paid > 0
-        Refresh(paid + " 골드를 상환했습니다. 남은 외상금 " + (owed - paid) + " 골드.")
+        RefreshTx(paid + " 골드를 상환했습니다. 남은 외상금 " + (owed - paid) + " 골드.", "payCredit", paid)
     Else
-        Refresh("외상금을 모두 상환했습니다.")
+        RefreshTx("외상금을 모두 상환했습니다.", "payCredit", paid)
     EndIf
 EndFunction
 

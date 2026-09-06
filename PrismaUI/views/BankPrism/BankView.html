@@ -9,107 +9,107 @@
       background: rgba(20, 24, 30, 0.95);
       border: 2px solid rgba(212, 175, 55, 0.5);
       border-radius: 8px;
-      padding: 24px;
-      width: 400px;
+      padding: 22px;
+      width: 420px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
       backdrop-filter: blur(5px);
     }
 
-    .title { text-align: center; color: #d4af37; font-size: 20px; margin-bottom: 20px; font-weight: bold; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 10px; }
+    .title { text-align: center; color: #d4af37; font-size: 20px; margin-bottom: 16px; font-weight: bold; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 10px; }
 
-    .stat-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 15px; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
     .stat-name { color: #aaa; }
     .stat-value { color: #fff; font-weight: bold; }
     .stat-value.negative { color: #ff6b6b; }
 
-    .input-section {
-      margin-top: 18px;
-      padding-top: 15px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
+    .section { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 
-    .amount-input {
-      background: rgba(0, 0, 0, 0.3);
+    /* The amount is chosen with buttons, never typed. Skyrim does not deliver keyboard
+       input to the view while the game is paused, and vanilla UIs never ask for typing. */
+    .amount-display {
+      background: rgba(0, 0, 0, 0.35);
       border: 1px solid rgba(212, 175, 55, 0.4);
-      color: #fff;
-      padding: 8px;
       border-radius: 4px;
-      font-size: 16px;
+      padding: 10px 12px;
+      font-size: 22px;
+      font-weight: bold;
       text-align: right;
-      width: 100%;
-      box-sizing: border-box;
-      outline: none;
+      color: #d4af37;
+      margin-bottom: 10px;
     }
+    .amount-display .unit { font-size: 14px; color: #8c7a33; margin-left: 4px; }
 
-    .amount-input:focus { border-color: #d4af37; }
+    .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
 
-    .btn-row { display: flex; gap: 10px; }
-
-    .action-btn { flex: 1; background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s; }
+    .action-btn { flex: 1; background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; }
     .action-btn:hover { background: rgba(212, 175, 55, 0.3); color: #fff; }
-    .action-btn.small { flex: 0 0 auto; padding: 6px 10px; font-size: 12px; font-weight: normal; }
+    .action-btn.small { padding: 6px 8px; font-size: 12px; font-weight: normal; }
     .action-btn.close-btn { background: rgba(255, 255, 255, 0.05); color: #ccc; border-color: rgba(255, 255, 255, 0.2); }
     .action-btn.close-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
 
-    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px; }
-
-    /* Ultralight has no alert(); every message is shown in this line instead. */
-    .status {
-      min-height: 18px;
-      margin-top: 12px;
-      font-size: 13px;
-      text-align: center;
-      color: #9ad29a;
-    }
+    .status { min-height: 18px; margin-top: 10px; font-size: 13px; text-align: center; color: #9ad29a; }
     .status.warn { color: #ffcf6b; }
+
+    .log-title { font-size: 12px; color: #888; margin-bottom: 6px; }
+    .log { font-size: 13px; max-height: 108px; overflow-y: auto; }
+    .log-empty { color: #666; font-size: 12px; }
+    .log-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .log-kind { color: #aaa; }
+    .log-amount.in { color: #7fc97f; }
+    .log-amount.out { color: #ff9b9b; }
+    .log-after { color: #777; font-size: 11px; margin-left: 8px; }
+
+    .actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; }
   </style>
 </head>
 <body>
 
-<div class="bank-panel" id="bankPanel">
+<div class="bank-panel">
   <div class="title">화이트런 은행 업무</div>
 
-  <div class="content" id="paramContainer">
-    <div class="stat-row">
-      <span class="stat-name">내 지갑 잔고</span>
-      <span class="stat-value" id="valWallet">0 G</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-name">은행 예금 잔고</span>
-      <span class="stat-value" id="valBalance">0 G</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-name">대출금</span>
-      <span class="stat-value negative" id="valDebt">0 G</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-name">상인 외상금</span>
-      <span class="stat-value negative" id="valCreditDebt">0 G</span>
-    </div>
+  <div class="stat-row">
+    <span class="stat-name">내 지갑 잔고</span>
+    <span class="stat-value" id="valWallet">0 G</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-name">은행 예금 잔고</span>
+    <span class="stat-value" id="valBalance">0 G</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-name">대출금</span>
+    <span class="stat-value negative" id="valDebt">0 G</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-name">상인 외상금</span>
+    <span class="stat-value negative" id="valCreditDebt">0 G</span>
   </div>
 
-  <div class="input-section">
-    <input type="text" id="amountInput" class="amount-input" placeholder="금액 입력" autofocus>
+  <div class="section">
+    <div class="amount-display"><span id="amountText">0</span><span class="unit">G</span></div>
+
     <div class="btn-row">
       <button class="action-btn small" onclick="addAmount(10)">+10</button>
       <button class="action-btn small" onclick="addAmount(100)">+100</button>
-      <button class="action-btn small" onclick="addAmount(1000)">+1000</button>
-      <button class="action-btn small" onclick="clearAmount()">지움</button>
+      <button class="action-btn small" onclick="addAmount(1000)">+1,000</button>
+      <button class="action-btn small" onclick="addAmount(10000)">+10,000</button>
     </div>
     <div class="btn-row">
       <button class="action-btn small" onclick="fillAll('wallet')">지갑 전액</button>
       <button class="action-btn small" onclick="fillAll('balance')">예금 전액</button>
+      <button class="action-btn small" onclick="setAmount(0)">지움</button>
     </div>
     <div class="btn-row">
       <button class="action-btn" onclick="handleTransaction('deposit')">입금하기</button>
       <button class="action-btn" onclick="handleTransaction('withdraw')">출금하기</button>
     </div>
+
+    <div class="status" id="statusLine"></div>
   </div>
 
-  <div class="status" id="statusLine"></div>
+  <div class="section">
+    <div class="log-title">이번 거래 기록</div>
+    <div class="log" id="txLog"><div class="log-empty">아직 거래가 없습니다.</div></div>
+  </div>
 
   <div class="actions">
     <button class="action-btn" onclick="sendAction('payCredit')">상인 외상값 상환</button>
@@ -120,6 +120,12 @@
 
 <script>
   var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0 };
+  var amount = 0;
+  var entries = [];
+
+  function comma(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
 
   function setStatus(text, isWarning) {
     var el = document.getElementById('statusLine');
@@ -127,9 +133,21 @@
     el.className = isWarning ? 'status warn' : 'status';
   }
 
-  // The SKSE plugin exposes this with RegisterJSListener(view, "bankAction", ...).
-  function sendAction(actionName, amount) {
-    var payload = (amount > 0) ? (actionName + ':' + amount) : actionName;
+  function setAmount(value) {
+    amount = value < 0 ? 0 : value;
+    document.getElementById('amountText').innerText = comma(amount);
+    setStatus('');
+  }
+
+  function addAmount(delta) { setAmount(amount + delta); }
+
+  function fillAll(source) {
+    setAmount(source === 'wallet' ? state.wallet : state.balance);
+  }
+
+  // Exposed by the SKSE plugin via RegisterJSListener(view, "bankAction", ...).
+  function sendAction(actionName, value) {
+    var payload = (value > 0) ? (actionName + ':' + value) : actionName;
     if (typeof window.bankAction === 'function') {
       window.bankAction(payload);
     } else {
@@ -138,11 +156,8 @@
   }
 
   function handleTransaction(type) {
-    var input = document.getElementById('amountInput');
-    var amount = currentAmount();
-
     if (amount <= 0) {
-      setStatus('금액을 입력해 주세요.', true);
+      setStatus('금액을 선택해 주세요.', true);
       return;
     }
     // Papyrus does the authoritative check; this only avoids a pointless round trip.
@@ -151,55 +166,47 @@
       setStatus(type === 'deposit' ? '지갑에 골드가 부족합니다.' : '예금 잔고가 부족합니다.', true);
       return;
     }
-
     sendAction(type, amount);
-    input.value = '';
   }
 
-  function currentAmount() {
-    var v = parseInt(document.getElementById('amountInput').value, 10);
-    return isNaN(v) ? 0 : v;
+  var LABELS = { deposit: '입금', withdraw: '출금', payCredit: '외상 상환' };
+  var INFLOW = { deposit: false, withdraw: true, payCredit: false };
+
+  // Only this session's transactions; nothing is written to the save.
+  function addEntry(type, value, balanceAfter) {
+    entries.unshift({ type: type, value: value, after: balanceAfter });
+    if (entries.length > 8) { entries.pop(); }
+
+    var log = document.getElementById('txLog');
+    log.innerHTML = '';
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var gain = INFLOW[e.type];
+      var row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML =
+        '<span class="log-kind">' + (LABELS[e.type] || e.type) + '</span>' +
+        '<span><span class="log-amount ' + (gain ? 'in' : 'out') + '">' +
+        (gain ? '+' : '-') + comma(e.value) + ' G</span>' +
+        '<span class="log-after">예금 ' + comma(e.after) + ' G</span></span>';
+      log.appendChild(row);
+    }
   }
-
-  // Buttons keep the panel usable even where the field cannot be typed into.
-  function addAmount(delta) {
-    document.getElementById('amountInput').value = currentAmount() + delta;
-    setStatus('');
-  }
-
-  function clearAmount() {
-    document.getElementById('amountInput').value = '';
-    setStatus('');
-  }
-
-  function fillAll(source) {
-    var value = (source === 'wallet') ? state.wallet : state.balance;
-    document.getElementById('amountInput').value = value > 0 ? value : '';
-    setStatus('');
-  }
-
-  var amountEl = document.getElementById('amountInput');
-
-  amountEl.addEventListener('input', function () {
-    var digits = amountEl.value.replace(/[^0-9]/g, '');
-    if (digits !== amountEl.value) { amountEl.value = digits; }
-  });
-
-  amountEl.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { handleTransaction('deposit'); }
-  });
-
-  try { amountEl.focus(); } catch (e) { /* focus is best-effort */ }
 
   window.bankUpdateParams = function (jsonString) {
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
 
-      if (data.wallet !== undefined) { state.wallet = data.wallet; document.getElementById('valWallet').innerText = data.wallet + ' G'; }
-      if (data.balance !== undefined) { state.balance = data.balance; document.getElementById('valBalance').innerText = data.balance + ' G'; }
-      if (data.debt !== undefined) { state.debt = data.debt; document.getElementById('valDebt').innerText = data.debt + ' G'; }
-      if (data.creditDebt !== undefined) { state.creditDebt = data.creditDebt; document.getElementById('valCreditDebt').innerText = data.creditDebt + ' G'; }
+      if (data.wallet !== undefined) { state.wallet = data.wallet; document.getElementById('valWallet').innerText = comma(data.wallet) + ' G'; }
+      if (data.balance !== undefined) { state.balance = data.balance; document.getElementById('valBalance').innerText = comma(data.balance) + ' G'; }
+      if (data.debt !== undefined) { state.debt = data.debt; document.getElementById('valDebt').innerText = comma(data.debt) + ' G'; }
+      if (data.creditDebt !== undefined) { state.creditDebt = data.creditDebt; document.getElementById('valCreditDebt').innerText = comma(data.creditDebt) + ' G'; }
       if (data.message !== undefined) { setStatus(data.message, false); }
+
+      if (data.txType) {
+        addEntry(data.txType, data.txAmount || 0, state.balance);
+        setAmount(0);
+      }
     } catch (e) {
       setStatus('데이터를 읽지 못했습니다.', true);
     }
