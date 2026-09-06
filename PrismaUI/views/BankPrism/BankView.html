@@ -3,19 +3,39 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { margin: 0; padding: 0; overflow: hidden; background: transparent; color: #ddd; font-family: 'Malgun Gothic', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    :root {
+      /* 기본 화이트런 테마 (Fallback) */
+      --bg-color: rgba(36, 28, 20, 0.95);
+      --border-color: rgba(212, 175, 55, 0.5);
+      --text-highlight: #d4af37;
+      --btn-bg: rgba(212, 175, 55, 0.15);
+      --btn-hover: rgba(212, 175, 55, 0.3);
+    }
+    
+    body.hold-whiterun { --bg-color: rgba(36, 28, 20, 0.95); --border-color: rgba(212, 175, 55, 0.5); --text-highlight: #d4af37; --btn-bg: rgba(212, 175, 55, 0.15); --btn-hover: rgba(212, 175, 55, 0.3); }
+    body.hold-haafingar { --bg-color: rgba(25, 15, 15, 0.95); --border-color: rgba(200, 50, 50, 0.5); --text-highlight: #e04b4b; --btn-bg: rgba(200, 50, 50, 0.15); --btn-hover: rgba(200, 50, 50, 0.3); }
+    body.hold-eastmarch { --bg-color: rgba(15, 25, 35, 0.95); --border-color: rgba(70, 130, 180, 0.5); --text-highlight: #60a0d0; --btn-bg: rgba(70, 130, 180, 0.15); --btn-hover: rgba(70, 130, 180, 0.3); }
+    body.hold-rift { --bg-color: rgba(30, 25, 15, 0.95); --border-color: rgba(205, 120, 50, 0.5); --text-highlight: #d88a44; --btn-bg: rgba(205, 120, 50, 0.15); --btn-hover: rgba(205, 120, 50, 0.3); }
+    body.hold-reach { --bg-color: rgba(25, 28, 20, 0.95); --border-color: rgba(180, 150, 90, 0.5); --text-highlight: #c8b070; --btn-bg: rgba(180, 150, 90, 0.15); --btn-hover: rgba(180, 150, 90, 0.3); }
+    body.hold-winterhold { --bg-color: rgba(20, 15, 30, 0.95); --border-color: rgba(140, 100, 200, 0.5); --text-highlight: #a980db; --btn-bg: rgba(140, 100, 200, 0.15); --btn-hover: rgba(140, 100, 200, 0.3); }
+    body.hold-pale { --bg-color: rgba(10, 12, 15, 0.95); --border-color: rgba(150, 170, 180, 0.5); --text-highlight: #a8c0cc; --btn-bg: rgba(150, 170, 180, 0.15); --btn-hover: rgba(150, 170, 180, 0.3); }
+    body.hold-hjaalmarch { --bg-color: rgba(15, 25, 15, 0.95); --border-color: rgba(90, 140, 90, 0.5); --text-highlight: #70b070; --btn-bg: rgba(90, 140, 90, 0.15); --btn-hover: rgba(90, 140, 90, 0.3); }
+    body.hold-falkreath { --bg-color: rgba(15, 20, 18, 0.95); --border-color: rgba(60, 100, 70, 0.5); --text-highlight: #5b8c66; --btn-bg: rgba(60, 100, 70, 0.15); --btn-hover: rgba(60, 100, 70, 0.3); }
+
+    body { margin: 0; padding: 0; overflow: hidden; background: transparent; color: #ddd; font-family: 'Malgun Gothic', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; transition: background 0.5s; }
 
     .bank-panel {
-      background: rgba(20, 24, 30, 0.95);
-      border: 2px solid rgba(212, 175, 55, 0.5);
+      background: var(--bg-color);
+      border: 2px solid var(--border-color);
       border-radius: 8px;
       padding: 22px;
       width: 420px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
       backdrop-filter: blur(5px);
+      transition: all 0.5s ease-in-out;
     }
 
-    .title { text-align: center; color: #d4af37; font-size: 20px; margin-bottom: 16px; font-weight: bold; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 10px; }
+    .title { text-align: center; color: var(--text-highlight); font-size: 20px; margin-bottom: 16px; font-weight: bold; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; transition: color 0.5s; }
 
     .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
     .stat-name { color: #aaa; }
@@ -24,25 +44,24 @@
 
     .section { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 
-    /* The amount is chosen with buttons, never typed. Skyrim does not deliver keyboard
-       input to the view while the game is paused, and vanilla UIs never ask for typing. */
     .amount-display {
       background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(212, 175, 55, 0.4);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       padding: 10px 12px;
       font-size: 22px;
       font-weight: bold;
       text-align: right;
-      color: #d4af37;
+      color: var(--text-highlight);
       margin-bottom: 10px;
+      transition: all 0.5s;
     }
-    .amount-display .unit { font-size: 14px; color: #8c7a33; margin-left: 4px; }
+    .amount-display .unit { font-size: 14px; margin-left: 4px; opacity: 0.8; }
 
     .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
 
-    .action-btn { flex: 1; background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; }
-    .action-btn:hover { background: rgba(212, 175, 55, 0.3); color: #fff; }
+    .action-btn { flex: 1; background: var(--btn-bg); color: var(--text-highlight); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; font-size: 14px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s; }
+    .action-btn:hover { background: var(--btn-hover); color: #fff; }
     .action-btn.small { padding: 6px 8px; font-size: 12px; font-weight: normal; }
     .action-btn.close-btn { background: rgba(255, 255, 255, 0.05); color: #ccc; border-color: rgba(255, 255, 255, 0.2); }
     .action-btn.close-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
@@ -193,12 +212,47 @@
     }
   }
 
+  function updateTheme(holdName) {
+    var mapping = {
+      '화이트런': 'hold-whiterun',
+      '하핀가르': 'hold-haafingar',
+      '솔리튜드': 'hold-haafingar',
+      '이스트마치': 'hold-eastmarch',
+      '윈드헬름': 'hold-eastmarch',
+      '더 리프트': 'hold-rift',
+      '리프튼': 'hold-rift',
+      '더 리치': 'hold-reach',
+      '마르카스': 'hold-reach',
+      '윈터홀드': 'hold-winterhold',
+      '페일': 'hold-pale',
+      '던스타': 'hold-pale',
+      '흐얄마치': 'hold-hjaalmarch',
+      '모탈': 'hold-hjaalmarch',
+      '포크리스': 'hold-falkreath'
+    };
+    
+    // 기본 테마 클래스 제거 후 매핑된 클래스 적용
+    document.body.className = '';
+    
+    for (var key in mapping) {
+      if (holdName.indexOf(key) !== -1) {
+        document.body.classList.add(mapping[key]);
+        return;
+      }
+    }
+    // 기본값 화이트런
+    document.body.classList.add('hold-whiterun');
+  }
+
   window.bankUpdateParams = function (jsonString) {
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
 
       // Accounts are per hold; the speaker decides which hold this panel is showing.
-      if (data.hold !== undefined) { document.getElementById('holdName').innerText = data.hold; }
+      if (data.hold !== undefined) { 
+        document.getElementById('holdName').innerText = data.hold; 
+        updateTheme(data.hold);
+      }
       if (data.wallet !== undefined) { state.wallet = data.wallet; document.getElementById('valWallet').innerText = comma(data.wallet) + ' G'; }
       if (data.balance !== undefined) { state.balance = data.balance; document.getElementById('valBalance').innerText = comma(data.balance) + ' G'; }
       if (data.debt !== undefined) { state.debt = data.debt; document.getElementById('valDebt').innerText = comma(data.debt) + ' G'; }
