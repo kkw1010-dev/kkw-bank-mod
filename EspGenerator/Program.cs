@@ -31,6 +31,47 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "standing")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                Console.WriteLine("=== 메인 퀘스트 ===");
+                foreach (var q in esm.Quests)
+                {
+                    var e = q.EditorID ?? "";
+                    if (!e.StartsWith("MQ1") && !e.StartsWith("MQ2") && e != "MQ306") continue;
+                    Console.WriteLine($"  {q.FormKey.ID:X6}  {e,-10}  \"{q.Name}\"  stages={q.Stages.Count}");
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("=== 세인(Thane) 관련 팩션 ===");
+                foreach (var f in esm.Factions)
+                {
+                    var e = f.EditorID ?? "";
+                    if (e.IndexOf("Thane", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    Console.WriteLine($"  {f.FormKey.ID:X6}  {e}");
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("=== 세인 임명 퀘스트(Favor) ===");
+                int n = 0;
+                foreach (var q in esm.Quests)
+                {
+                    var e = q.EditorID ?? "";
+                    if (e.IndexOf("Thane", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    Console.WriteLine($"  {q.FormKey.ID:X6}  {e,-28} \"{q.Name}\" stages={q.Stages.Count}");
+                    if (++n >= 15) break;
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("=== 배달부 퀘스트 확인 ===");
+                var courier = new FormKey(new ModKey("Skyrim", ModType.Master), 0x039F82);
+                var cq = esm.Quests.FirstOrDefault(q => q.FormKey == courier);
+                Console.WriteLine($"  {courier} -> {cq?.EditorID ?? "(찾지 못함)"}");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "gmst")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -556,23 +597,31 @@ namespace EspGenerator
             const uint IdBalanceBase  = 0x810;
             const uint IdBankDebtBase = 0x820;
             const uint IdCreditBase   = 0x830;
+            const uint IdLoanDueBase  = 0x840;   // game time the loan falls due, 0 = none
+            const uint IdLetterBase   = 0x850;   // one dunning letter per hold
+            const uint IdPrincipalBase = 0x870;  // the sum the overdue charge is figured on
+            const uint IdLoanTier1    = 0x860;
+            const uint IdLoanTier2    = 0x861;
+            const uint IdLoanTier3    = 0x862;
+            const uint IdLoanTermDays = 0x863;
+            const uint IdOverduePct   = 0x864;
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
 
             // The nine holds, in the order the Papyrus side indexes them. This order is
             // part of the save format: reordering it moves every account to another hold.
-            var holds = new (string name, uint crimeFaction)[]
+            var holds = new (string name, string korean, uint crimeFaction)[]
             {
-                ("Whiterun",   0x0267EA),
-                ("Haafingar",  0x029DB0),
-                ("Eastmarch",  0x0267E3),
-                ("Rift",       0x02816B),
-                ("Reach",      0x02816C),
-                ("Falkreath",  0x028170),
-                ("Hjaalmarch", 0x02816D),
-                ("Pale",       0x02816E),
-                ("Winterhold", 0x02816F),
+                ("Whiterun",   "화이트런",   0x0267EA),
+                ("Haafingar",  "하핑가",     0x029DB0),
+                ("Eastmarch",  "이스트마치", 0x0267E3),
+                ("Rift",       "리프트",     0x02816B),
+                ("Reach",      "리치",       0x02816C),
+                ("Falkreath",  "팔크리스",   0x028170),
+                ("Hjaalmarch", "햘마치",     0x02816D),
+                ("Pale",       "페일",       0x02816E),
+                ("Winterhold", "윈터홀드",   0x02816F),
             };
 
             // ---- 1. Globals ----------------------------------------------------------
@@ -599,13 +648,54 @@ namespace EspGenerator
                 creditDebts.Add(NewGlobal(IdCreditBase + i, "MerchantCreditDebt" + h));
             }
 
+            var loanDue = new List<GlobalFloat>();
+            var loanPrincipal = new List<GlobalFloat>();
+            for (uint i = 0; i < holds.Length; i++)
+            {
+                loanDue.Add(NewGlobal(IdLoanDueBase + i, "BankLoanDue" + holds[i].name));
+                loanPrincipal.Add(NewGlobal(IdPrincipalBase + i, "BankLoanPrincipal" + holds[i].name));
+            }
+
             var merchantCreditLimit = NewGlobal(IdCreditLimit, "MerchantCreditLimit", 1000f);
+
+            // No lender fronts gold to an unproven sellsword. Standing is read off the main
+            // quest: nothing until the Greybeards acknowledge the player, then it climbs.
+            var loanTier1 = NewGlobal(IdLoanTier1, "BankLoanLimitTier1", 2500f);
+            var loanTier2 = NewGlobal(IdLoanTier2, "BankLoanLimitTier2", 6000f);
+            var loanTier3 = NewGlobal(IdLoanTier3, "BankLoanLimitTier3", 15000f);
+            var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
+            // Charged per whole week overdue, on the original sum. Simple, not compound:
+            // it grows in a straight line and cannot run away.
+            var overduePct = NewGlobal(IdOverduePct, "BankLoanOverduePercent", 20f);
             // A single 20% markup applied once, when a credit purchase is written to the
             // ledger. Nothing accrues afterwards, so no timer or background script is
             // needed and the debt cannot run away on its own.
             var surcharge = NewGlobal(IdSurcharge, "MerchantCreditSurchargePercent", 20f);
             // 210 = DirectX scan code for Insert; 0 disables the test shortcut.
             var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 210f);
+
+            // A letter per hold, handed to the vanilla courier when a loan falls overdue.
+            var letters = new List<Book>();
+            for (uint i = 0; i < holds.Length; i++)
+            {
+                var hold = holds[i];
+                var book = new Book(Id(IdLetterBase + i), SkyrimRelease.SkyrimSE)
+                {
+                    EditorID = "BankPrismDunningLetter" + hold.name,
+                    Name = hold.korean + " 채무 독촉장",
+                    Weight = 0f,
+                    Value = 0,
+                    BookText =
+                        "[pagebreak]\n\n" +
+                        hold.korean + " 은행 채무부.\n\n" +
+                        "귀하의 대출은 이미 기한을 넘겼습니다. 장부는 매주 불어나고 있으며, " +
+                        "우리는 기다리는 데 익숙하지 않습니다.\n\n" +
+                        "청지기를 찾아 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
+                        "— " + hold.korean + " 채무부"
+                };
+                mod.Books.Add(book);
+                letters.Add(book);
+            }
 
             // Crime factions in hold order. Papyrus resolves the hold by asking the
             // speaker for its crime faction and finding it here - the same value Skyrim's
@@ -638,6 +728,14 @@ namespace EspGenerator
                     Object = target.ToLink<ISkyrimMajorRecordGetter>()
                 });
 
+            ScriptObjectListProperty BookListProp(string name, IEnumerable<Book> items)
+            {
+                var list = new ScriptObjectListProperty { Name = name };
+                foreach (var b in items)
+                    list.Objects.Add(new ScriptObjectProperty { Object = b.ToLink<ISkyrimMajorRecordGetter>() });
+                return list;
+            }
+
             void ListProp(string name, IEnumerable<GlobalFloat> items)
             {
                 var list = new ScriptObjectListProperty { Name = name };
@@ -649,10 +747,25 @@ namespace EspGenerator
             ListProp("BankBalances", balances);
             ListProp("BankDebts", bankDebts);
             ListProp("CreditDebts", creditDebts);
+            ListProp("LoanDue", loanDue);
+            ListProp("LoanPrincipal", loanPrincipal);
+            controller.Properties.Add(BookListProp("DunningLetters", letters));
             ObjProp("HoldCrimeFactions", holdList.FormKey);
             ObjProp("MerchantCreditLimit", merchantCreditLimit.FormKey);
             ObjProp("CreditSurcharge", surcharge.FormKey);
             ObjProp("DebugHotkey", debugHotkey.FormKey);
+            ObjProp("LoanTier1", loanTier1.FormKey);
+            ObjProp("LoanTier2", loanTier2.FormKey);
+            ObjProp("LoanTier3", loanTier3.FormKey);
+            ObjProp("LoanTermDays", loanTermDays.FormKey);
+            ObjProp("OverduePercent", overduePct.FormKey);
+
+            // Standing tiers, and the courier that carries the letters.
+            ObjProp("MQWayOfTheVoice", Vanilla(0x0242BA));   // MQ105 The Way of the Voice
+            ObjProp("MQBladeInTheDark", Vanilla(0x032926));  // MQ106 A Blade in the Dark
+            ObjProp("MQAlduinsBane", Vanilla(0x036193));     // MQ206 Alduin's Bane
+            ObjProp("Courier", Vanilla(0x039F82));           // WICourier
+
             ObjProp("Gold001", Gold001);
 
             bankQuest.VirtualMachineAdapter = new QuestAdapter();

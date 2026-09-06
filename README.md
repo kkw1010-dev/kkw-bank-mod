@@ -81,7 +81,7 @@ are easy to get wrong here and are deliberately handled in code:
 "C:\TAKEALOOK\mods\Creation Kit\Root\Papyrus Compiler\PapyrusCompiler.exe" ^
   "C:\TAKEALOOK\BankPrismUI\Scripts\Source" -all ^
   -f="C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts\TESV_Papyrus_Flags.flg" ^
-  -i="C:\TAKEALOOK\BankPrismUI\Scripts\Source;C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts;C:\TAKEALOOK\mods\Skyrim Script Extender (SKSE64)\Scripts\Source" ^
+  -i="C:\TAKEALOOK\BankPrismUI\Scripts\Source;C:\TAKEALOOK\BankPrismUI\Scripts\Import;C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts;C:\TAKEALOOK\mods\Skyrim Script Extender (SKSE64)\Scripts\Source" ^
   -o="C:\TAKEALOOK\BankPrismUI\Scripts"
 ```
 
@@ -95,6 +95,18 @@ compile. Compiling the same string from three encodings gives:
 | UTF-8, no BOM | fails, or silently mangles | broken |
 | UTF-8 with BOM | yes | correct |
 | cp949 | yes | correct |
+
+`Scripts/Import` holds vanilla sources the project compiles against but does not
+ship - currently `WICourierScript.psc`, needed to hand a letter to the courier.
+It is not in the partial extraction under `mods/Papyrus Compiler`, so pull it out
+of the Creation Kit archive and it stays out of git:
+
+```
+python -c "import zipfile,os; z=zipfile.ZipFile(r'C:\TAKEALOOK\mods\Creation Kit\Root\Data\Scripts.zip'); open(r'C:\TAKEALOOK\BankPrismUI\Scripts\Import\WICourierScript.psc','wb').write(z.read('Source/Scripts/WICourierScript.psc'))"
+```
+
+Only `Scripts/Source` is compiled, so nothing in `Import` produces a .pex that
+could overwrite the game's own.
 
 ### 3. SKSE plugin (`BankPrismNative.dll`)
 

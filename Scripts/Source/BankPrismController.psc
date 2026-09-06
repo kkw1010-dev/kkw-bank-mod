@@ -10,6 +10,23 @@ GlobalVariable[] Property CreditDebts Auto
 FormList Property HoldCrimeFactions Auto
 
 GlobalVariable Property MerchantCreditLimit Auto
+
+; --- loans ---------------------------------------------------------------
+GlobalVariable[] Property LoanDue Auto
+GlobalVariable[] Property LoanPrincipal Auto
+Book[] Property DunningLetters Auto
+
+GlobalVariable Property LoanTier1 Auto
+GlobalVariable Property LoanTier2 Auto
+GlobalVariable Property LoanTier3 Auto
+GlobalVariable Property LoanTermDays Auto
+GlobalVariable Property OverduePercent Auto
+
+Quest Property MQWayOfTheVoice Auto
+Quest Property MQBladeInTheDark Auto
+Quest Property MQAlduinsBane Auto
+
+WICourierScript Property Courier Auto
 GlobalVariable Property CreditSurcharge Auto
 
 ; Test shortcut. DirectX scan code; 210 is Insert. Set to 0 to disable.
@@ -116,6 +133,18 @@ String Function GetHoldKey(Int aiHold)
     Return "whiterun"
 EndFunction
 
+; Whole days until this hold's loan falls due; negative once it is overdue.
+Int Function GetLoanDaysLeft()
+    If !HoldIsValid(CurrentHold) || LoanDue == None
+        Return 0
+    EndIf
+    Float dueAt = LoanDue[CurrentHold].GetValue()
+    If dueAt <= 0.0
+        Return 0
+    EndIf
+    Return Math.Floor(dueAt - Utility.GetCurrentGameTime())
+EndFunction
+
 Bool Function HoldIsValid(Int aiHold)
     Return aiHold >= 0 && BankBalances && aiHold < BankBalances.Length
 EndFunction
@@ -147,6 +176,7 @@ Function ShowBank()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
     bMenuOpen = True
+    AccrueOverdue(CurrentHold)
     BankPrismNative.OpenMenu()
     Refresh("")
 EndFunction
@@ -181,6 +211,8 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"balance\":" + balance \
         + ", \"debt\":" + debt \
         + ", \"creditDebt\":" + credit \
+        + ", \"loanLimit\":" + GetLoanLimit() \
+        + ", \"loanDaysLeft\":" + GetLoanDaysLeft() \
         + ", \"hold\":\"" + GetHoldName(CurrentHold) + "\"" \
         + ", \"holdKey\":\"" + GetHoldKey(CurrentHold) + "\"" \
         + ", \"txType\":\"" + asTxType + "\"" \
@@ -386,6 +418,215 @@ Event OnMenuClose(String menuName)
 EndEvent
 
 ; ---------------------------------------------------------------------------
+; Loans
+; ---------------------------------------------------------------------------
+
+; No lender fronts gold to an unproven sellsword - the trade is too close to a
+; mercenary's for anyone's comfort. Standing is read off the main quest: nothing at
+; all until the Greybeards acknowledge the player, and it climbs from there.
+Int Function GetLoanLimit()
+    Int limit = 0
+    If MQWayOfTheVoice && MQWayOfTheVoice.IsCompleted()
+        limit = GetGlobalInt(LoanTier1)
+    EndIf
+    If MQBladeInTheDark && MQBladeInTheDark.IsCompleted()
+        limit = GetGlobalInt(LoanTier2)
+    EndIf
+    If MQAlduinsBane && MQAlduinsBane.IsCompleted()
+        limit = GetGlobalInt(LoanTier3)
+    EndIf
+    Return limit
+EndFunction
+
+Int Function GetLoanTermDays()
+    Int term = GetGlobalInt(LoanTermDays)
+    If term <= 0
+        term = 7
+    EndIf
+    Return term
+EndFunction
+
+; Charges every whole term that has passed since the loan came due, moving the due
+; date forward as it goes so the same week is never billed twice. The charge is a
+; share of the original sum, not of the running total, so the debt grows in a
+; straight line instead of compounding away.
+Function AccrueOverdue(Int aiHold)
+    If !HoldIsValid(aiHold) || LoanDue == None || LoanPrincipal == None
+        Return
+    EndIf
+
+    GlobalVariable due = LoanDue[aiHold]
+    GlobalVariable ledger = BankDebts[aiHold]
+    Float dueAt = due.GetValue()
+
+    If dueAt <= 0.0 || ledger.GetValueInt() <= 0
+        Return
+    EndIf
+
+    Int term = GetLoanTermDays()
+    Int pct = GetGlobalInt(OverduePercent)
+    Int principal = LoanPrincipal[aiHold].GetValueInt()
+    Int charge = (principal * pct) / 100
+    Float now = Utility.GetCurrentGameTime()
+    Int weeks = 0
+
+    While now >= dueAt + term && weeks < 52
+        ledger.SetValueInt(ledger.GetValueInt() + charge)
+        dueAt += term
+        weeks += 1
+    EndWhile
+
+    If weeks > 0
+        due.SetValue(dueAt)
+        Debug.Notification(GetHoldName(aiHold) + " 채무가 연체되어 " + (charge * weeks) + " 골드가 더해졌습니다.")
+    EndIf
+EndFunction
+
+Bool Function IsOverdue(Int aiHold)
+    If !HoldIsValid(aiHold) || LoanDue == None
+        Return False
+    EndIf
+    Float dueAt = LoanDue[aiHold].GetValue()
+    Return dueAt > 0.0 && BankDebts[aiHold].GetValueInt() > 0 && Utility.GetCurrentGameTime() >= dueAt
+EndFunction
+
+Bool Function AnyLoanOutstanding()
+    Int i = 0
+    While i < BankDebts.Length
+        If BankDebts[i].GetValueInt() > 0
+            Return True
+        EndIf
+        i += 1
+    EndWhile
+    Return False
+EndFunction
+
+Function TakeLoan(Int aiAmount)
+    If !HoldIsValid(CurrentHold) || Gold001 == None
+        Refresh("대출을 취급할 수 없습니다.")
+        Return
+    EndIf
+
+    GlobalVariable ledger = BankDebts[CurrentHold]
+    If ledger.GetValueInt() > 0
+        Refresh("이미 갚지 않은 대출이 있습니다.")
+        Return
+    EndIf
+
+    Int limit = GetLoanLimit()
+    If limit <= 0
+        Refresh("이름 없는 칼잡이에게 내어줄 돈은 없다고 합니다.")
+        Return
+    EndIf
+    If aiAmount <= 0
+        Refresh("금액을 선택해 주세요.")
+        Return
+    EndIf
+    If aiAmount > limit
+        Refresh("대출 한도는 " + limit + " 골드입니다.")
+        Return
+    EndIf
+
+    ; One markup, applied once at signing. Nothing accrues until the term runs out.
+    Int pct = GetSurchargePercent()
+    Int owed = aiAmount + ((aiAmount * pct) / 100)
+
+    LoanPrincipal[CurrentHold].SetValueInt(aiAmount)
+    ledger.SetValueInt(owed)
+    LoanDue[CurrentHold].SetValue(Utility.GetCurrentGameTime() + GetLoanTermDays())
+
+    Game.GetPlayer().AddItem(Gold001, aiAmount, True)
+    ScheduleDunningRun()
+
+    RefreshTx(aiAmount + " 골드를 빌렸습니다. " + GetLoanTermDays() + "일 안에 " + owed + " 골드를 갚아야 합니다.", "borrow", aiAmount)
+EndFunction
+
+Function RepayLoan(Int aiAmount, Int aiPlayerGold)
+    If !HoldIsValid(CurrentHold) || Gold001 == None
+        Refresh("대출을 취급할 수 없습니다.")
+        Return
+    EndIf
+
+    GlobalVariable ledger = BankDebts[CurrentHold]
+    Int owed = ledger.GetValueInt()
+    If owed <= 0
+        Refresh("갚을 대출이 없습니다.")
+        Return
+    EndIf
+
+    Int pay = aiAmount
+    If pay <= 0 || pay > owed
+        pay = owed
+    EndIf
+
+    Int fromWallet = aiPlayerGold
+    If fromWallet > pay
+        fromWallet = pay
+    EndIf
+
+    GlobalVariable acct = BankBalances[CurrentHold]
+    Int fromBank = acct.GetValueInt()
+    If fromBank > pay - fromWallet
+        fromBank = pay - fromWallet
+    EndIf
+
+    Int paid = fromWallet + fromBank
+    If paid <= 0
+        Refresh("갚을 골드가 없습니다.")
+        Return
+    EndIf
+
+    If fromWallet > 0
+        Game.GetPlayer().RemoveItem(Gold001, fromWallet, True)
+    EndIf
+    If fromBank > 0
+        acct.SetValueInt(acct.GetValueInt() - fromBank)
+    EndIf
+    ledger.SetValueInt(owed - paid)
+
+    If owed - paid <= 0
+        LoanDue[CurrentHold].SetValue(0.0)
+        LoanPrincipal[CurrentHold].SetValueInt(0)
+        RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
+    Else
+        RefreshTx(paid + " 골드를 갚았습니다. 남은 채무 " + (owed - paid) + " 골드.", "repay", paid)
+    EndIf
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Dunning letters
+; ---------------------------------------------------------------------------
+
+; The vanilla courier carries them: a letter goes into its container and it finds the
+; player in the next town. A daily check runs only while a loan is outstanding and
+; stops itself once the ledger is clear.
+Function ScheduleDunningRun()
+    RegisterForSingleUpdateGameTime(1.0)
+EndFunction
+
+Function SendDunningLetter(Int aiHold)
+    If Courier == None || DunningLetters == None || aiHold >= DunningLetters.Length
+        Return
+    EndIf
+    Courier.addItemToContainer(DunningLetters[aiHold], 1)
+EndFunction
+
+Event OnUpdateGameTime()
+    Int i = 0
+    While i < BankDebts.Length
+        AccrueOverdue(i)
+        If IsOverdue(i)
+            SendDunningLetter(i)
+        EndIf
+        i += 1
+    EndWhile
+
+    If AnyLoanOutstanding()
+        ScheduleDunningRun()
+    EndIf
+EndEvent
+
+; ---------------------------------------------------------------------------
 ; UI events
 ; ---------------------------------------------------------------------------
 
@@ -402,6 +643,10 @@ Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form send
         Deposit(amount, playerGold)
     ElseIf strArg == "withdraw"
         Withdraw(amount)
+    ElseIf strArg == "borrow"
+        TakeLoan(amount)
+    ElseIf strArg == "repay"
+        RepayLoan(amount, playerGold)
     ElseIf strArg == "payCredit"
         PayMerchantCredit(playerGold)
     ElseIf strArg == "sellBond"
