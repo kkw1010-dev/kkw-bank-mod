@@ -31,6 +31,35 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "notes")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                // What a vanilla note actually carries, so ours can match it.
+                int shown = 0;
+                foreach (var b in esm.Books)
+                {
+                    var e = b.EditorID ?? "";
+                    if (e.IndexOf("Note", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        e.IndexOf("Letter", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (b.Model == null) continue;
+
+                    Console.WriteLine($"BOOK {b.FormKey.ID:X6} {e}");
+                    Console.WriteLine($"    Name        = {b.Name}");
+                    Console.WriteLine($"    Model       = {b.Model?.File}");
+                    Console.WriteLine($"    InventoryArt= {b.InventoryArt.FormKeyNullable}");
+                    Console.WriteLine($"    Flags       = {b.Flags}");
+                    Console.WriteLine($"    Type        = {b.Type}");
+                    Console.WriteLine($"    Value/Weight= {b.Value} / {b.Weight}");
+                    Console.WriteLine($"    PickUpSound = {b.PickUpSound.FormKeyNullable}");
+                    Console.WriteLine($"    PutDownSound= {b.PutDownSound.FormKeyNullable}");
+                    Console.WriteLine($"    Keywords    = {b.Keywords?.Count ?? 0}");
+                    if (++shown >= 3) break;
+                }
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "standing")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -685,6 +714,11 @@ namespace EspGenerator
                     Name = hold.korean + " 채무 독촉장",
                     Weight = 0f,
                     Value = 0,
+                    // A book with no model crashes the game the moment BookMenu tries to
+                    // draw it. These are the fields a vanilla note carries, copied from
+                    // WERoad08CourierLetter (0x1065F5).
+                    Type = Book.BookType.BookOrTome,
+                    Model = new Model { File = "Clutter\\Books\\Note01.nif" },
                     BookText =
                         "[pagebreak]\n\n" +
                         hold.korean + " 은행 채무부.\n\n" +
@@ -693,6 +727,8 @@ namespace EspGenerator
                         "청지기를 찾아 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
                         "— " + hold.korean + " 채무부"
                 };
+                book.InventoryArt.SetTo(Vanilla(0x097788));  // the note's inventory static
+                book.PickUpSound.SetTo(Vanilla(0x0C7A54));   // ITMBookUp
                 mod.Books.Add(book);
                 letters.Add(book);
             }
@@ -924,6 +960,8 @@ namespace EspGenerator
                         Console.WriteLine($"      {pr.Name} type={pr.GetType().Name} -> {shown}");
                     }
                 }
+            foreach (var b in check.Books)
+                Console.WriteLine($"  BOOK {b.FormKey.ID:X6} {b.EditorID} model={b.Model?.File?.ToString() ?? "(NONE - BookMenu will crash)"} art={b.InventoryArt.FormKeyNullable} type={b.Type}");
             foreach (var fl in check.FormLists)
                 Console.WriteLine($"  FLST {fl.FormKey.ID:X6} {fl.EditorID} items={fl.Items.Count} [" +
                     string.Join(", ", fl.Items.Select(i => i.FormKeyNullable?.ID.ToString("X6") ?? "?")) + "]");
