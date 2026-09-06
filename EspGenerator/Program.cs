@@ -31,6 +31,38 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "credit")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var stores = new (uint faction, string label)[]
+                {
+                    (0x09CAF5, "Belethor's General Goods"),
+                    (0x05A665, "Riverwood Trader"),
+                    (0x0A6C02, "Bits and Pieces"),
+                    (0x0A31C5, "Pawned Prawn"),
+                    (0x094375, "Arnleif and Sons"),
+                    (0x0A3F12, "Sadri's Used Wares"),
+                    (0x09DA62, "Birna's Oddments"),
+                    (0x0A6BFE, "Gray Pine Goods"),
+                    (0x09DA5B, "Thaumaturgist's Hut"),
+                };
+
+                foreach (var (fac, label) in stores)
+                {
+                    var key = new FormKey(new ModKey("Skyrim", ModType.Master), fac);
+                    var f = esm.Factions.FirstOrDefault(x => x.FormKey == key);
+                    Console.WriteLine($"{fac:X6}  {label}  ({f?.EditorID})");
+                    foreach (var n in esm.Npcs.Where(n => n.Factions.Any(fr => fr.Faction.FormKeyNullable == key)))
+                    {
+                        var crime = esm.Factions.FirstOrDefault(x => x.FormKey == n.CrimeFaction.FormKeyNullable);
+                        Console.WriteLine($"      {n.Name?.String}  ({n.EditorID})  hold={crime?.EditorID ?? "(없음)"}");
+                    }
+                }
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "steward")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
