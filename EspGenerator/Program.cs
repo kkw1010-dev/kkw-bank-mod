@@ -31,6 +31,116 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "steward")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var prov = new FormKey(new ModKey("Skyrim", ModType.Master), 0x013BBA);
+                var p2 = esm.Npcs.First(n => n.FormKey == prov);
+                Console.WriteLine("프로벤투스 소속 팩션:");
+                foreach (var fr in p2.Factions)
+                {
+                    var f = esm.Factions.FirstOrDefault(x => x.FormKey == fr.Faction.FormKeyNullable);
+                    int n = esm.Npcs.Count(x => x.Factions.Any(y => y.Faction.FormKeyNullable == f?.FormKey));
+                    Console.WriteLine($"  {f?.FormKey.ID:X6} {f?.EditorID}  (소속 {n}명)");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Steward 이름이 들어간 팩션:");
+                foreach (var f in esm.Factions)
+                {
+                    var e = f.EditorID ?? "";
+                    if (e.IndexOf("Steward", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    int n = esm.Npcs.Count(x => x.Factions.Any(y => y.Faction.FormKeyNullable == f.FormKey));
+                    if (n > 0) Console.WriteLine($"  {f.FormKey.ID:X6} {f.EditorID}  (소속 {n}명)");
+                }
+                return;
+            }
+
+            if (args.Length > 0 && args[0] == "verify")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var cellOf = new Dictionary<FormKey, (string cell, bool interior)>();
+                foreach (var cell in esm.EnumerateMajorRecords<ICellGetter>())
+                {
+                    bool interior = cell.Flags.HasFlag(Cell.Flag.IsInteriorCell);
+                    var label = cell.EditorID ?? cell.FormKey.ToString();
+                    foreach (var r in cell.Persistent) cellOf[r.FormKey] = (label, interior);
+                    foreach (var r in cell.Temporary) cellOf[r.FormKey] = (label, interior);
+                }
+
+                var wanted = new (string name, string claimed)[]
+                {
+                    ("Belethor", "00013BA3"), ("Lucan", "0001347A"), ("Sayma", "000132A1"),
+                    ("Bersi", "0001334E"), ("Lisbet", "000133A1"), ("RevynSadri", "0001412A"),
+                    ("Birna", "0001338B"), ("Solaf", "00013653"), ("Lami", "000135E6"),
+                };
+
+                foreach (var (name, claimed) in wanted)
+                {
+                    var hits = esm.Npcs.Where(n =>
+                        (n.EditorID ?? "").IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                    if (hits.Count == 0) { Console.WriteLine($"{name}: 찾지 못함 (주장 {claimed})"); continue; }
+                    foreach (var n in hits.Take(3))
+                    {
+                        var vend = n.Factions
+                            .Select(fr => esm.Factions.FirstOrDefault(x => x.FormKey == fr.Faction.FormKeyNullable))
+                            .FirstOrDefault(x => x != null && x.Flags.HasFlag(Faction.FactionFlag.Vendor));
+                        var crime = n.CrimeFaction.FormKeyNullable;
+                        var crimeRec = esm.Factions.FirstOrDefault(x => x.FormKey == crime);
+                        string shopCell = "(창고 없음)";
+                        if (vend != null && vend.MerchantContainer.FormKeyNullable is FormKey mk
+                            && cellOf.TryGetValue(mk, out var loc)) shopCell = loc.cell + (loc.interior ? " [실내]" : " [실외]");
+                        bool ok = string.Equals(n.FormKey.ID.ToString("X8"), claimed, StringComparison.OrdinalIgnoreCase);
+                        Console.WriteLine($"{n.EditorID,-20} 실제={n.FormKey.ID:X8} 주장={claimed} {(ok ? "일치" : "*** 불일치 ***")}");
+                        Console.WriteLine($"    이름={n.Name?.String}  범죄팩션={crimeRec?.EditorID ?? "(없음)"}");
+                        Console.WriteLine($"    판매팩션={vend?.EditorID ?? "(없음)"} [{vend?.FormKey.ID:X6}]  상점={shopCell}");
+                    }
+                }
+                return;
+            }
+
+            if (args.Length > 0 && args[0] == "general")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var cellOf = new Dictionary<FormKey, (string cell, bool interior)>();
+                foreach (var cell in esm.EnumerateMajorRecords<ICellGetter>())
+                {
+                    bool interior = cell.Flags.HasFlag(Cell.Flag.IsInteriorCell);
+                    var label = cell.EditorID ?? cell.FormKey.ToString();
+                    foreach (var r in cell.Persistent) cellOf[r.FormKey] = (label, interior);
+                    foreach (var r in cell.Temporary) cellOf[r.FormKey] = (label, interior);
+                }
+
+                var belethorFac = new FormKey(new ModKey("Skyrim", ModType.Master), 0x09CAF5);
+                var bel = esm.Factions.First(f => f.FormKey == belethorFac);
+                var listKey = bel.VendorBuySellList.FormKeyNullable;
+                var listRec = esm.FormLists.FirstOrDefault(l => l.FormKey == listKey);
+                Console.WriteLine($"벨레쏘어 판매목록: {listKey} {listRec?.EditorID}");
+                Console.WriteLine();
+                Console.WriteLine("--- 같은 판매목록을 쓰는 판매 팩션 ---");
+
+                foreach (var f in esm.Factions)
+                {
+                    if (!f.Flags.HasFlag(Faction.FactionFlag.Vendor)) continue;
+                    if (f.VendorBuySellList.FormKeyNullable != listKey) continue;
+                    var mc = f.MerchantContainer.FormKeyNullable;
+                    var members = esm.Npcs.Where(n => n.Factions.Any(fr => fr.Faction.FormKeyNullable == f.FormKey)).ToList();
+                    if (members.Count == 0) continue;
+                    string cellLabel = "(창고 없음)";
+                    bool interior = false;
+                    if (mc != null && cellOf.TryGetValue(mc.Value, out var loc)) { cellLabel = loc.cell; interior = loc.interior; }
+                    Console.WriteLine($"  {f.FormKey.ID:X6} {f.EditorID}");
+                    Console.WriteLine($"      cell={cellLabel} interior={interior}");
+                    foreach (var m in members)
+                        Console.WriteLine($"      NPC {m.FormKey.ID:X6} {m.EditorID} / {m.Name?.String}");
+                }
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "shops")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -287,22 +397,41 @@ namespace EspGenerator
             // order, so inserting a record used to shift every later one - which moves a
             // running quest out from under an existing save and silently kills its
             // dialogue. New records take a new id at the end; nothing above ever moves.
-            const uint IdBankBalance        = 0x800;
-            const uint IdBankDebt           = 0x801;
-            const uint IdMerchantCreditDebt = 0x802;
-            const uint IdQuest              = 0x803;
-            const uint IdBankTopic          = 0x804;
-            const uint IdBankBranch         = 0x805;
-            const uint IdBankInfo           = 0x806;
-            const uint IdCreditLimit        = 0x807;
-            const uint IdCreditTopic        = 0x808;
-            const uint IdCreditBranch       = 0x809;
-            const uint IdCreditInfo         = 0x80A;
-            const uint IdDebugHotkey        = 0x80B;
+            const uint IdQuest        = 0x803;
+            const uint IdBankTopic    = 0x804;
+            const uint IdBankBranch   = 0x805;
+            const uint IdBankInfo     = 0x806;
+            const uint IdCreditLimit  = 0x807;
+            const uint IdCreditTopic  = 0x808;
+            const uint IdCreditBranch = 0x809;
+            const uint IdCreditInfo   = 0x80A;
+            const uint IdDebugHotkey  = 0x80B;
+            const uint IdSurcharge    = 0x80C;
+            const uint IdHoldList     = 0x80D;
+            // 0x810 / 0x820 / 0x830 plus the hold index, for the three per-hold accounts.
+            const uint IdBalanceBase  = 0x810;
+            const uint IdBankDebtBase = 0x820;
+            const uint IdCreditBase   = 0x830;
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
+            FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
 
-            // ---- 1. Global variables -------------------------------------------------
+            // The nine holds, in the order the Papyrus side indexes them. This order is
+            // part of the save format: reordering it moves every account to another hold.
+            var holds = new (string name, uint crimeFaction)[]
+            {
+                ("Whiterun",   0x0267EA),
+                ("Haafingar",  0x029DB0),
+                ("Eastmarch",  0x0267E3),
+                ("Rift",       0x02816B),
+                ("Reach",      0x02816C),
+                ("Falkreath",  0x028170),
+                ("Hjaalmarch", 0x02816D),
+                ("Pale",       0x02816E),
+                ("Winterhold", 0x02816F),
+            };
+
+            // ---- 1. Globals ----------------------------------------------------------
             // Global is abstract in Mutagen; GlobalFloat must be constructed directly.
             GlobalFloat NewGlobal(uint id, string edid, float value = 0f)
             {
@@ -315,20 +444,40 @@ namespace EspGenerator
                 return g;
             }
 
-            var bankBalance = NewGlobal(IdBankBalance, "BankBalance");
-            var bankDebt = NewGlobal(IdBankDebt, "BankDebt");
-            var merchantCreditDebt = NewGlobal(IdMerchantCreditDebt, "MerchantCreditDebt");
+            var balances = new List<GlobalFloat>();
+            var bankDebts = new List<GlobalFloat>();
+            var creditDebts = new List<GlobalFloat>();
+            for (uint i = 0; i < holds.Length; i++)
+            {
+                var h = holds[i].name;
+                balances.Add(NewGlobal(IdBalanceBase + i, "BankBalance" + h));
+                bankDebts.Add(NewGlobal(IdBankDebtBase + i, "BankDebt" + h));
+                creditDebts.Add(NewGlobal(IdCreditBase + i, "MerchantCreditDebt" + h));
+            }
+
             var merchantCreditLimit = NewGlobal(IdCreditLimit, "MerchantCreditLimit", 1000f);
+            // A single 20% markup applied once, when a credit purchase is written to the
+            // ledger. Nothing accrues afterwards, so no timer or background script is
+            // needed and the debt cannot run away on its own.
+            var surcharge = NewGlobal(IdSurcharge, "MerchantCreditSurchargePercent", 20f);
             // 210 = DirectX scan code for Insert; 0 disables the test shortcut.
             var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 210f);
+
+            // Crime factions in hold order. Papyrus resolves the hold by asking the
+            // speaker for its crime faction and finding it here - the same value Skyrim's
+            // own bounty system uses, so jurisdiction matches the game's.
+            var holdList = new FormList(Id(IdHoldList), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = "BankPrismHoldCrimeFactions"
+            };
+            foreach (var h in holds) holdList.Items.Add(Vanilla(h.crimeFaction));
+            mod.FormLists.Add(holdList);
 
             // ---- 2. Controller quest -------------------------------------------------
             var bankQuest = new Quest(Id(IdQuest), SkyrimRelease.SkyrimSE) { EditorID = "BankPrismQuest" };
             mod.Quests.Add(bankQuest);
             bankQuest.Name = "Bank Prism Quest";
             bankQuest.Flags |= Quest.Flag.StartGameEnabled;
-            // Vanilla dialogue quests carry a real priority (40-70) and a type;
-            // a priority of 0 leaves the topic ranked below everything else.
             bankQuest.Priority = 50;
             bankQuest.Type = Quest.TypeEnum.Misc;
 
@@ -337,12 +486,30 @@ namespace EspGenerator
                 Name = "BankPrismController",
                 Flags = ScriptEntry.Flag.Local
             };
-            controller.Properties.Add(new ScriptObjectProperty { Name = "BankBalance", Object = bankBalance.ToLink<ISkyrimMajorRecordGetter>() });
-            controller.Properties.Add(new ScriptObjectProperty { Name = "BankDebt", Object = bankDebt.ToLink<ISkyrimMajorRecordGetter>() });
-            controller.Properties.Add(new ScriptObjectProperty { Name = "MerchantCreditDebt", Object = merchantCreditDebt.ToLink<ISkyrimMajorRecordGetter>() });
-            controller.Properties.Add(new ScriptObjectProperty { Name = "MerchantCreditLimit", Object = merchantCreditLimit.ToLink<ISkyrimMajorRecordGetter>() });
-            controller.Properties.Add(new ScriptObjectProperty { Name = "DebugHotkey", Object = debugHotkey.ToLink<ISkyrimMajorRecordGetter>() });
-            controller.Properties.Add(new ScriptObjectProperty { Name = "Gold001", Object = Gold001.ToLink<ISkyrimMajorRecordGetter>() });
+
+            void ObjProp(string name, FormKey target) =>
+                controller.Properties.Add(new ScriptObjectProperty
+                {
+                    Name = name,
+                    Object = target.ToLink<ISkyrimMajorRecordGetter>()
+                });
+
+            void ListProp(string name, IEnumerable<GlobalFloat> items)
+            {
+                var list = new ScriptObjectListProperty { Name = name };
+                foreach (var g in items)
+                    list.Objects.Add(new ScriptObjectProperty { Object = g.ToLink<ISkyrimMajorRecordGetter>() });
+                controller.Properties.Add(list);
+            }
+
+            ListProp("BankBalances", balances);
+            ListProp("BankDebts", bankDebts);
+            ListProp("CreditDebts", creditDebts);
+            ObjProp("HoldCrimeFactions", holdList.FormKey);
+            ObjProp("MerchantCreditLimit", merchantCreditLimit.FormKey);
+            ObjProp("CreditSurcharge", surcharge.FormKey);
+            ObjProp("DebugHotkey", debugHotkey.FormKey);
+            ObjProp("Gold001", Gold001);
 
             bankQuest.VirtualMachineAdapter = new QuestAdapter();
             bankQuest.VirtualMachineAdapter.Scripts.Add(controller);
@@ -351,8 +518,7 @@ namespace EspGenerator
             // Every vanilla player topic belongs to a top-level DialogBranch. A topic
             // without one is never offered in the dialogue menu at all.
             void AddTopic(string id, uint topicId, uint branchId, uint infoId,
-                          string prompt, string response, FormKey speaker, string fragment,
-                          bool speakerIsFaction = false)
+                          string prompt, string response, FormKey[] factions, string fragment)
             {
                 var topic = new DialogTopic(Id(topicId), SkyrimRelease.SkyrimSE);
                 mod.DialogTopics.Add(topic);
@@ -386,26 +552,21 @@ namespace EspGenerator
                     Emotion = Emotion.Neutral
                 });
 
-                ConditionData speakerCondition;
-                if (speakerIsFaction)
+                // Conditioning on the faction rather than the actor survives NPC overhauls
+                // that replace the record. Alternatives are OR'd: every clause but the last
+                // carries the OR flag, which is how Skyrim groups them.
+                for (int i = 0; i < factions.Length; i++)
                 {
                     var inFaction = new GetInFactionConditionData();
-                    inFaction.Faction.Link.SetTo(speaker);
-                    speakerCondition = inFaction;
+                    inFaction.Faction.Link.SetTo(factions[i]);
+                    info.Conditions.Add(new ConditionFloat
+                    {
+                        CompareOperator = CompareOperator.EqualTo,
+                        ComparisonValue = 1f,
+                        Data = inFaction,
+                        Flags = i < factions.Length - 1 ? Condition.Flag.OR : default
+                    });
                 }
-                else
-                {
-                    var isId = new GetIsIDConditionData();
-                    isId.Object.Link.SetTo(speaker);
-                    speakerCondition = isId;
-                }
-
-                info.Conditions.Add(new ConditionFloat
-                {
-                    CompareOperator = CompareOperator.EqualTo,
-                    ComparisonValue = 1f,
-                    Data = speakerCondition
-                });
 
                 var entry = new ScriptEntry { Name = fragment, Flags = ScriptEntry.Flag.Local };
                 entry.Properties.Add(new ScriptObjectProperty
@@ -430,18 +591,35 @@ namespace EspGenerator
                 topic.Responses.Add(info);
             }
 
+            // One faction covers every hold steward, including the wartime replacements.
             AddTopic("BankPrismBank", IdBankTopic, IdBankBranch, IdBankInfo,
                      "은행 업무를 보고 싶습니다.",
                      "물론입니다. 어떤 업무를 도와드릴까요?",
-                     ProventusAvenicci, "BankPrismDialogueFragment");
+                     new[] { Vanilla(0x050922) }, "BankPrismDialogueFragment");
 
-            // Merchant credit is limited to Belethor while the mechanic is being tested.
-            // Widening it later is a matter of calling AddTopic for more speakers, or
-            // replacing the GetIsID condition with one OR clause per vendor faction.
+            // Standalone general stores with their own premises. Blacksmiths, alchemists,
+            // innkeepers, market stalls and the Khajiit caravans are deliberately absent:
+            // Eorlund extending credit to the Companions' Harbinger reads wrong. Faction
+            // ids were read out of Skyrim.esm rather than taken on trust - of the nine NPC
+            // ids supplied with this list, eight were wrong.
+            var generalStores = new[]
+            {
+                Vanilla(0x09CAF5), // ServicesWhiterunBelethorsGoods    - Belethor
+                Vanilla(0x05A665), // ServicesRiverwoodRiverwoodTrader  - Lucan Valerius
+                Vanilla(0x0A6C02), // ServicesSolitudeBitsAndPieces     - Sayma
+                Vanilla(0x0A31C5), // ServicesRiftenPawnedPrawn         - Bersi Honey-Hand
+                Vanilla(0x094375), // ServicesMarkarthArnleifandSons    - Lisbet
+                Vanilla(0x0A3F12), // ServicesWindhelmRevynSadri        - Revyn Sadri
+                Vanilla(0x09DA62), // ServicesWinterholdBirna           - Birna
+                Vanilla(0x0A6BFE), // ServicesFalkreathGrayPineGoods    - Solaf
+                Vanilla(0x09DA5B), // ServicesMorthalLami               - Lami
+            };
+
             AddTopic("BankPrismCredit", IdCreditTopic, IdCreditBranch, IdCreditInfo,
                      "외상으로 거래하고 싶습니다.",
                      "장부에 달아 두지요. 갚는 것만 잊지 마시오.",
-                     BelethorsGoodsFaction, "BankPrismCreditFragment", speakerIsFaction: true);
+                     generalStores, "BankPrismCreditFragment");
+
 
             // ---- 4. Write ------------------------------------------------------------
             var outputPath = Path.Combine(
@@ -473,9 +651,19 @@ namespace EspGenerator
                     foreach (var pr in sc.Properties)
                     {
                         var obj = pr as IScriptObjectPropertyGetter;
-                        Console.WriteLine($"      {pr.Name} type={pr.GetType().Name} -> {obj?.Object.FormKeyNullable?.ToString() ?? "(not object)"}");
+                        var lst = pr as IScriptObjectListPropertyGetter;
+                        string shown;
+                        if (lst != null)
+                            shown = lst.Objects.Count + "개 [" +
+                                string.Join(", ", lst.Objects.Select(o => o.Object.FormKeyNullable?.ID.ToString("X3") ?? "?")) + "]";
+                        else
+                            shown = obj?.Object.FormKeyNullable?.ToString() ?? "(not object)";
+                        Console.WriteLine($"      {pr.Name} type={pr.GetType().Name} -> {shown}");
                     }
                 }
+            foreach (var fl in check.FormLists)
+                Console.WriteLine($"  FLST {fl.FormKey.ID:X6} {fl.EditorID} items={fl.Items.Count} [" +
+                    string.Join(", ", fl.Items.Select(i => i.FormKeyNullable?.ID.ToString("X6") ?? "?")) + "]");
             foreach (var b in check.DialogBranches)
                 Console.WriteLine($"  DLBR {b.FormKey.ID:X6} {b.EditorID} quest={b.Quest.FormKeyNullable} start={b.StartingTopic.FormKeyNullable} flags={b.Flags} cat={b.Category}");
             foreach (var d in check.DialogTopics)
@@ -490,7 +678,7 @@ namespace EspGenerator
                         var gfa = c.Data as IGetInFactionConditionDataGetter;
                         var tgt = gid?.Object.Link.FormKeyNullable?.ToString()
                                ?? gfa?.Faction.Link.FormKeyNullable?.ToString() ?? "(NONE)";
-                        Console.WriteLine($"      cond: {c.Data.GetType().Name} target={tgt} op={c.CompareOperator}");
+                        Console.WriteLine($"      cond: {c.Data.GetType().Name} target={tgt} op={c.CompareOperator} flags={c.Flags}");
                     }
                     var frag = r.VirtualMachineAdapter?.ScriptFragments;
                     Console.WriteLine($"      fragment file={frag?.FileName} onBegin={frag?.OnBegin?.ScriptName}.{frag?.OnBegin?.FragmentName}");

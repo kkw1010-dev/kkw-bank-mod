@@ -65,7 +65,7 @@
 <body>
 
 <div class="bank-panel">
-  <div class="title">화이트런 은행 업무</div>
+  <div class="title"><span id="holdName">화이트런</span> 은행 업무</div>
 
   <div class="stat-row">
     <span class="stat-name">내 지갑 잔고</span>
@@ -197,6 +197,8 @@
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
 
+      // Accounts are per hold; the speaker decides which hold this panel is showing.
+      if (data.hold !== undefined) { document.getElementById('holdName').innerText = data.hold; }
       if (data.wallet !== undefined) { state.wallet = data.wallet; document.getElementById('valWallet').innerText = comma(data.wallet) + ' G'; }
       if (data.balance !== undefined) { state.balance = data.balance; document.getElementById('valBalance').innerText = comma(data.balance) + ' G'; }
       if (data.debt !== undefined) { state.debt = data.debt; document.getElementById('valDebt').innerText = comma(data.debt) + ' G'; }

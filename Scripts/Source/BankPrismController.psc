@@ -1,22 +1,31 @@
 ﻿ScriptName BankPrismController extends Quest
-{Controller for the bank and merchant credit system driven by PrismaUI.}
+{Per-hold bank and merchant credit, driven by PrismaUI.}
 
-Bool Property bMenuOpen = False Auto
-MiscObject Property Gold001 Auto
+; Accounts are per hold, indexed the same way as HoldCrimeFactions. The hold is
+; resolved from the speaker's crime faction, which is the value Skyrim's own bounty
+; system uses, so jurisdiction lines up with the game's.
+GlobalVariable[] Property BankBalances Auto
+GlobalVariable[] Property BankDebts Auto
+GlobalVariable[] Property CreditDebts Auto
+FormList Property HoldCrimeFactions Auto
 
-GlobalVariable Property BankBalance Auto
-GlobalVariable Property BankDebt Auto
-GlobalVariable Property MerchantCreditDebt Auto
 GlobalVariable Property MerchantCreditLimit Auto
+GlobalVariable Property CreditSurcharge Auto
 
 ; Test shortcut. DirectX scan code; 210 is Insert. Set to 0 to disable.
 GlobalVariable Property DebugHotkey Auto
 
+MiscObject Property Gold001 Auto
+
+Bool Property bMenuOpen = False Auto
+Int Property CurrentHold = 0 Auto Hidden
+
 ; Set while a credit barter is in flight, so OnMenuClose knows the BarterMenu it sees
-; is ours and how much was lent. Hidden properties so they survive a save.
+; is ours, which hold it belongs to, and how much was lent.
 Bool Property bCreditBarterActive = False Auto Hidden
 Int Property CreditLentAmount = 0 Auto Hidden
 Int Property CreditGoldBefore = 0 Auto Hidden
+Int Property CreditHold = 0 Auto Hidden
 
 Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
@@ -24,8 +33,7 @@ Event OnInit()
 EndEvent
 
 ; A hotkey costs ten lines and no dependencies. An MCM would need MCM Helper plus a
-; config json, and SKSE Menu Framework would need ImGui integration in the plugin -
-; both far more machinery than opening the bank for a test is worth.
+; config json, and SKSE Menu Framework would need ImGui integration in the plugin.
 Function RegisterDebugHotkey()
     ; Not named 'key': Key is an existing Skyrim script type and the name is reserved.
     Int iKeyCode = 210
@@ -41,13 +49,76 @@ Event OnKeyDown(Int aiKeyCode)
     If bMenuOpen || Utility.IsInMenuMode()
         Return
     EndIf
-    OpenBankMenu()
+    ; No speaker here, so the shortcut reopens whichever hold was last used.
+    ShowBank()
 EndEvent
 
-Function OpenBankMenu()
+; ---------------------------------------------------------------------------
+; Holds
+; ---------------------------------------------------------------------------
+
+Int Function ResolveHold(Actor akSpeaker)
+    If akSpeaker == None || HoldCrimeFactions == None
+        Return -1
+    EndIf
+    Faction crime = akSpeaker.GetCrimeFaction()
+    If crime == None
+        Return -1
+    EndIf
+    Return HoldCrimeFactions.Find(crime)
+EndFunction
+
+String Function GetHoldName(Int aiHold)
+    If aiHold == 0
+        Return "화이트런"
+    ElseIf aiHold == 1
+        Return "하핑가"
+    ElseIf aiHold == 2
+        Return "이스트마치"
+    ElseIf aiHold == 3
+        Return "리프트"
+    ElseIf aiHold == 4
+        Return "리치"
+    ElseIf aiHold == 5
+        Return "팔크리스"
+    ElseIf aiHold == 6
+        Return "햘마치"
+    ElseIf aiHold == 7
+        Return "페일"
+    ElseIf aiHold == 8
+        Return "윈터홀드"
+    EndIf
+    Return "알 수 없는 지역"
+EndFunction
+
+Bool Function HoldIsValid(Int aiHold)
+    Return aiHold >= 0 && BankBalances && aiHold < BankBalances.Length
+EndFunction
+
+Int Function GetGlobalInt(GlobalVariable akGlobal)
+    If akGlobal
+        Return akGlobal.GetValueInt()
+    EndIf
+    Return 0
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Menu
+; ---------------------------------------------------------------------------
+
+Function OpenBankMenu(Actor akSpeaker)
+    Int hold = ResolveHold(akSpeaker)
+    If !HoldIsValid(hold)
+        Debug.Notification("이 곳에서는 은행 업무를 볼 수 없습니다.")
+        Return
+    EndIf
+    CurrentHold = hold
+    ShowBank()
+EndFunction
+
+Function ShowBank()
     ; Re-register on every open. A registration made only in OnInit is lost when the
-    ; script is recompiled or the quest is reset, and the UI would then accept clicks
-    ; that never reach Papyrus - which looks exactly like the mod being broken.
+    ; script is recompiled, and the UI would then accept clicks that never arrive.
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
     bMenuOpen = True
@@ -60,14 +131,6 @@ Function CloseBankMenu()
     BankPrismNative.CloseMenu()
 EndFunction
 
-Int Function GetGlobalInt(GlobalVariable akGlobal)
-    If akGlobal
-        Return akGlobal.GetValueInt()
-    EndIf
-    Return 0
-EndFunction
-
-; Pushes the current figures to the view, optionally with a status line.
 Function Refresh(String asMessage)
     RefreshTx(asMessage, "", 0)
 EndFunction
@@ -80,17 +143,33 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         playerGold = Game.GetPlayer().GetItemCount(Gold001)
     EndIf
 
-    String jsonPayload = "{\"wallet\":" + playerGold         + ", \"balance\":" + GetGlobalInt(BankBalance)         + ", \"debt\":" + GetGlobalInt(BankDebt)         + ", \"creditDebt\":" + GetGlobalInt(MerchantCreditDebt)         + ", \"txType\":\"" + asTxType + "\""         + ", \"txAmount\":" + aiTxAmount         + ", \"message\":\"" + asMessage + "\"}"
+    Int balance = 0
+    Int debt = 0
+    Int credit = 0
+    If HoldIsValid(CurrentHold)
+        balance = GetGlobalInt(BankBalances[CurrentHold])
+        debt = GetGlobalInt(BankDebts[CurrentHold])
+        credit = GetGlobalInt(CreditDebts[CurrentHold])
+    EndIf
+
+    String jsonPayload = "{\"wallet\":" + playerGold \
+        + ", \"balance\":" + balance \
+        + ", \"debt\":" + debt \
+        + ", \"creditDebt\":" + credit \
+        + ", \"hold\":\"" + GetHoldName(CurrentHold) + "\"" \
+        + ", \"txType\":\"" + asTxType + "\"" \
+        + ", \"txAmount\":" + aiTxAmount \
+        + ", \"message\":\"" + asMessage + "\"}"
 
     BankPrismNative.UpdateParams(jsonPayload)
 EndFunction
 
-Function UpdateBankUI()
-    Refresh("")
-EndFunction
+; ---------------------------------------------------------------------------
+; Deposits and withdrawals
+; ---------------------------------------------------------------------------
 
 Function Deposit(Int aiAmount, Int aiPlayerGold)
-    If BankBalance == None || Gold001 == None
+    If !HoldIsValid(CurrentHold) || Gold001 == None
         Refresh("은행 계좌를 사용할 수 없습니다.")
     ElseIf aiAmount <= 0
         Refresh("금액을 확인해 주세요.")
@@ -100,34 +179,40 @@ Function Deposit(Int aiAmount, Int aiPlayerGold)
         ; Take the gold only after every check has passed. Removing it first meant a
         ; failed check destroyed the player's gold without crediting the account.
         Game.GetPlayer().RemoveItem(Gold001, aiAmount, True)
-        BankBalance.SetValueInt(BankBalance.GetValueInt() + aiAmount)
+        GlobalVariable acct = BankBalances[CurrentHold]
+        acct.SetValueInt(acct.GetValueInt() + aiAmount)
         RefreshTx(aiAmount + " 골드를 입금했습니다.", "deposit", aiAmount)
     EndIf
 EndFunction
 
 Function Withdraw(Int aiAmount)
-    If BankBalance == None || Gold001 == None
+    If !HoldIsValid(CurrentHold) || Gold001 == None
         Refresh("은행 계좌를 사용할 수 없습니다.")
-    ElseIf aiAmount <= 0
+        Return
+    EndIf
+
+    GlobalVariable acct = BankBalances[CurrentHold]
+    If aiAmount <= 0
         Refresh("금액을 확인해 주세요.")
-    ElseIf BankBalance.GetValueInt() < aiAmount
+    ElseIf acct.GetValueInt() < aiAmount
         Refresh("예금 잔고가 부족합니다.")
     Else
-        BankBalance.SetValueInt(BankBalance.GetValueInt() - aiAmount)
+        acct.SetValueInt(acct.GetValueInt() - aiAmount)
         Game.GetPlayer().AddItem(Gold001, aiAmount, True)
         RefreshTx(aiAmount + " 골드를 출금했습니다.", "withdraw", aiAmount)
     EndIf
 EndFunction
 
-; Provisional: settles as much merchant credit as the player can actually pay,
-; wallet first and then the account. The final rules wait on the credit design.
+; Settles as much of this hold's merchant credit as the player can pay, wallet first
+; and then the account.
 Function PayMerchantCredit(Int aiPlayerGold)
-    If MerchantCreditDebt == None
+    If !HoldIsValid(CurrentHold)
         Refresh("외상 정보를 사용할 수 없습니다.")
         Return
     EndIf
 
-    Int owed = MerchantCreditDebt.GetValueInt()
+    GlobalVariable ledger = CreditDebts[CurrentHold]
+    Int owed = ledger.GetValueInt()
     If owed <= 0
         Refresh("상환할 외상금이 없습니다.")
         Return
@@ -139,7 +224,8 @@ Function PayMerchantCredit(Int aiPlayerGold)
     EndIf
 
     Int remaining = owed - fromWallet
-    Int fromBank = GetGlobalInt(BankBalance)
+    GlobalVariable acct = BankBalances[CurrentHold]
+    Int fromBank = acct.GetValueInt()
     If fromBank > remaining
         fromBank = remaining
     EndIf
@@ -154,9 +240,9 @@ Function PayMerchantCredit(Int aiPlayerGold)
         Game.GetPlayer().RemoveItem(Gold001, fromWallet, True)
     EndIf
     If fromBank > 0
-        BankBalance.SetValueInt(BankBalance.GetValueInt() - fromBank)
+        acct.SetValueInt(acct.GetValueInt() - fromBank)
     EndIf
-    MerchantCreditDebt.SetValueInt(owed - paid)
+    ledger.SetValueInt(owed - paid)
 
     If owed - paid > 0
         RefreshTx(paid + " 골드를 상환했습니다. 남은 외상금 " + (owed - paid) + " 골드.", "payCredit", paid)
@@ -165,16 +251,26 @@ Function PayMerchantCredit(Int aiPlayerGold)
     EndIf
 EndFunction
 
-; Merchant credit works by lending the player gold, letting them use the ordinary
-; vanilla barter window, and converting whatever they actually spent into debt when
-; the window closes. Copying the merchant's stock into our own container would lose
-; restocking, speech-perk pricing, the merchant's own gold, and selling back to them.
+; ---------------------------------------------------------------------------
+; Merchant credit
+; ---------------------------------------------------------------------------
+
+; Credit lends the player gold, lets them use the ordinary vanilla barter window, and
+; converts whatever they actually spent into debt when the window closes. Copying the
+; merchant's stock into our own container would lose restocking, speech-perk pricing,
+; the merchant's own gold, and selling back to them.
 Function BeginCreditBarter(Actor akMerchant)
-    If akMerchant == None || Gold001 == None || MerchantCreditDebt == None
+    If akMerchant == None || Gold001 == None
         Debug.Notification("외상 거래를 사용할 수 없습니다.")
         Return
     EndIf
     If bCreditBarterActive
+        Return
+    EndIf
+
+    Int hold = ResolveHold(akMerchant)
+    If !HoldIsValid(hold)
+        Debug.Notification("이 상인에게는 외상을 달 수 없습니다.")
         Return
     EndIf
 
@@ -183,20 +279,36 @@ Function BeginCreditBarter(Actor akMerchant)
         limit = MerchantCreditLimit.GetValueInt()
     EndIf
 
-    Int available = limit - MerchantCreditDebt.GetValueInt()
-    If available <= 0
-        Debug.Notification("외상 한도를 모두 사용했습니다.")
+    Int headroom = limit - CreditDebts[hold].GetValueInt()
+    If headroom <= 0
+        Debug.Notification(GetHoldName(hold) + " 외상 한도를 모두 사용했습니다.")
+        Return
+    EndIf
+
+    ; The limit caps the debt, not the spend. Since the ledger records the purchase
+    ; with the markup added, lend only what still fits under the limit afterwards.
+    Int lend = (headroom * 100) / (100 + GetSurchargePercent())
+    If lend <= 0
+        Debug.Notification(GetHoldName(hold) + " 외상 한도가 거의 남지 않았습니다.")
         Return
     EndIf
 
     Actor player = Game.GetPlayer()
     CreditGoldBefore = player.GetItemCount(Gold001)
-    CreditLentAmount = available
+    CreditLentAmount = lend
+    CreditHold = hold
     bCreditBarterActive = True
 
     RegisterForMenu("BarterMenu")
-    player.AddItem(Gold001, available, True)
+    player.AddItem(Gold001, lend, True)
     akMerchant.ShowBarterMenu()
+EndFunction
+
+Int Function GetSurchargePercent()
+    If CreditSurcharge
+        Return CreditSurcharge.GetValueInt()
+    EndIf
+    Return 20
 EndFunction
 
 Event OnMenuClose(String menuName)
@@ -221,20 +333,24 @@ Event OnMenuClose(String menuName)
         reclaim = lent
     EndIf
 
-    Int owed = (CreditGoldBefore + lent) - goldAfter
-    If owed < 0
-        owed = 0
-    ElseIf owed > lent
-        owed = lent
+    Int spent = (CreditGoldBefore + lent) - goldAfter
+    If spent < 0
+        spent = 0
+    ElseIf spent > lent
+        spent = lent
     EndIf
 
     If reclaim > 0
         player.RemoveItem(Gold001, reclaim, True)
     EndIf
 
-    If owed > 0
-        MerchantCreditDebt.SetValueInt(MerchantCreditDebt.GetValueInt() + owed)
-        Debug.Notification(owed + " 골드를 외상으로 달았습니다.")
+    If spent > 0
+        ; One markup, applied once, at the moment the purchase is written to the ledger.
+        Int pct = GetSurchargePercent()
+        Int charged = spent + ((spent * pct) / 100)
+        GlobalVariable ledger = CreditDebts[CreditHold]
+        ledger.SetValueInt(ledger.GetValueInt() + charged)
+        Debug.Notification(GetHoldName(CreditHold) + " 외상 " + charged + " 골드 (" + pct + "% 가산).")
     Else
         Debug.Notification("외상으로 구매한 물건이 없습니다.")
     EndIf
@@ -242,6 +358,10 @@ Event OnMenuClose(String menuName)
     CreditLentAmount = 0
     CreditGoldBefore = 0
 EndEvent
+
+; ---------------------------------------------------------------------------
+; UI events
+; ---------------------------------------------------------------------------
 
 Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form sender)
     Int amount = Math.Floor(numArg)
