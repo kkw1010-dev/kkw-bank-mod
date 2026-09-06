@@ -91,6 +91,31 @@ String Function GetHoldName(Int aiHold)
     Return "알 수 없는 지역"
 EndFunction
 
+; ASCII key for the view: picks the hold's background art and avoids putting a
+; non-ASCII filename in a URL.
+String Function GetHoldKey(Int aiHold)
+    If aiHold == 0
+        Return "whiterun"
+    ElseIf aiHold == 1
+        Return "haafingar"
+    ElseIf aiHold == 2
+        Return "eastmarch"
+    ElseIf aiHold == 3
+        Return "rift"
+    ElseIf aiHold == 4
+        Return "reach"
+    ElseIf aiHold == 5
+        Return "falkreath"
+    ElseIf aiHold == 6
+        Return "hjaalmarch"
+    ElseIf aiHold == 7
+        Return "pale"
+    ElseIf aiHold == 8
+        Return "winterhold"
+    EndIf
+    Return "whiterun"
+EndFunction
+
 Bool Function HoldIsValid(Int aiHold)
     Return aiHold >= 0 && BankBalances && aiHold < BankBalances.Length
 EndFunction
@@ -157,6 +182,7 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"debt\":" + debt \
         + ", \"creditDebt\":" + credit \
         + ", \"hold\":\"" + GetHoldName(CurrentHold) + "\"" \
+        + ", \"holdKey\":\"" + GetHoldKey(CurrentHold) + "\"" \
         + ", \"txType\":\"" + asTxType + "\"" \
         + ", \"txAmount\":" + aiTxAmount \
         + ", \"message\":\"" + asMessage + "\"}"

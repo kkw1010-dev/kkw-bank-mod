@@ -21,8 +21,13 @@ $dest = Join-Path $ModsRoot $ModName
 $files = @(
     'BankPrismUI.esp'
     'SKSE\Plugins\BankPrismNative.dll'
-    'PrismaUI\views\BankPrism\BankView.html'
 )
+
+# The whole view folder, so background art and any other asset travel with the page.
+$viewRoot = Join-Path $repo 'PrismaUI\views\BankPrism'
+foreach ($f in Get-ChildItem -Path $viewRoot -File -Recurse) {
+    $files += $f.FullName.Substring($repo.Length + 1)
+}
 
 foreach ($pattern in @('Scripts\*.pex', 'Scripts\Source\*.psc')) {
     $found = Get-ChildItem -Path (Join-Path $repo $pattern) -File -ErrorAction SilentlyContinue
