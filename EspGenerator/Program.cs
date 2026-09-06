@@ -31,6 +31,34 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "holds")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                Console.WriteLine("--- 범죄 팩션 (홀드 단위) ---");
+                int n = 0;
+                foreach (var f in esm.Factions)
+                {
+                    var e = f.EditorID ?? "";
+                    if (e.IndexOf("Crime", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (f.CrimeValues == null) continue;
+                    Console.WriteLine($"  {f.FormKey.ID:X6}  {e}");
+                    n++;
+                }
+                Console.WriteLine($"  합계 {n}개");
+
+                Console.WriteLine();
+                Console.WriteLine("--- Mutagen 배열 프로퍼티 타입 확인 ---");
+                foreach (var t in typeof(ScriptEntry).Assembly.GetTypes())
+                    if (t.Name.StartsWith("ScriptObject") || t.Name.StartsWith("ScriptProperty"))
+                        if (!t.Name.Contains("Getter") && !t.Name.Contains("Common") && !t.Name.Contains("Binary")
+                            && !t.Name.Contains("Registration") && !t.Name.Contains("FieldIndex")
+                            && !t.Name.Contains("Setter") && !t.Name.Contains("Mixin"))
+                            Console.WriteLine("  " + t.Name);
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "belethor")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
