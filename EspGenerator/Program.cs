@@ -31,6 +31,35 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "gmst")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var wanted = new[]
+                {
+                    "iDaysToRespawnVendor", "iHoursToRespawnCell", "iHoursToRespawnCellCleared",
+                    "iCrimeGoldMurder", "iCrimeGoldAssault", "iCrimeGoldTrespass",
+                    "iCrimeGoldPickpocket", "iCrimeGoldEscape", "fCrimeGoldSteal",
+                    "iCrimeGoldWerewolf", "iCrimeAlarmLowRecDistance",
+                };
+
+                foreach (var g in esm.GameSettings)
+                {
+                    var e = g.EditorID ?? "";
+                    if (!wanted.Contains(e)) continue;
+                    string val = g switch
+                    {
+                        IGameSettingIntGetter gi => gi.Data?.ToString() ?? "(null)",
+                        IGameSettingFloatGetter gf => gf.Data?.ToString() ?? "(null)",
+                        IGameSettingStringGetter gs => gs.Data?.String ?? "(null)",
+                        _ => "(?)"
+                    };
+                    Console.WriteLine($"  {e,-30} = {val}");
+                }
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "ordiff")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
