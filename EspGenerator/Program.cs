@@ -31,6 +31,60 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "shops")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                // Which cell each placed object sits in, so a merchant chest can be told
+                // apart by whether its shop is an interior.
+                var cellOf = new Dictionary<FormKey, (string cell, bool interior)>();
+                foreach (var cell in esm.EnumerateMajorRecords<ICellGetter>())
+                {
+                    bool interior = cell.Flags.HasFlag(Cell.Flag.IsInteriorCell);
+                    var label = cell.EditorID ?? cell.FormKey.ToString();
+                    foreach (var r in cell.Persistent) cellOf[r.FormKey] = (label, interior);
+                    foreach (var r in cell.Temporary) cellOf[r.FormKey] = (label, interior);
+                }
+
+                int inside = 0, outside = 0, unknown = 0, insideMembers = 0, outsideMembers = 0;
+                var outsideList = new List<string>();
+                foreach (var f in esm.Factions)
+                {
+                    if (!f.Flags.HasFlag(Faction.FactionFlag.Vendor)) continue;
+                    var mc = f.MerchantContainer.FormKeyNullable;
+                    if (mc == null) continue;
+                    int members = esm.Npcs.Count(n => n.Factions.Any(fr => fr.Faction.FormKeyNullable == f.FormKey));
+                    if (members == 0) continue;
+
+                    if (!cellOf.TryGetValue(mc.Value, out var loc)) { unknown++; continue; }
+                    if (loc.interior) { inside++; insideMembers += members; }
+                    else { outside++; outsideMembers += members; outsideList.Add($"    {f.EditorID}  cell={loc.cell}  ({members}명)"); }
+                }
+
+                Console.WriteLine($"상점 창고가 실내(건물 안): {inside}개 팩션");
+                Console.WriteLine($"상점 창고가 실외(노점/대상): {outside}개 팩션");
+                Console.WriteLine($"창고 위치 확인 불가: {unknown}개 팩션");
+                Console.WriteLine();
+                Console.WriteLine($"실내 팩션 소속 NPC 합계: {insideMembers}명 / 실외 {outsideMembers}명");
+                Console.WriteLine();
+                Console.WriteLine("--- Mutagen 퍽 엔트리포인트 타입 ---");
+                foreach (var t in typeof(Perk).Assembly.GetTypes())
+                    if (t.Name.StartsWith("PerkEntryPoint") && !t.Name.Contains("Getter")
+                        && !t.Name.Contains("Common") && !t.Name.Contains("Binary")
+                        && !t.Name.Contains("Registration") && !t.Name.Contains("FieldIndex")
+                        && !t.Name.Contains("Setter") && !t.Name.Contains("MixIn"))
+                        Console.WriteLine("  " + t.Name);
+                Console.WriteLine();
+                Console.WriteLine("--- 조건 함수: GetGlobalValue / GetInFaction 존재 여부 ---");
+                foreach (var nm in new[] { "GetGlobalValueConditionData", "GetInFactionConditionData", "GetItemCountConditionData" })
+                    Console.WriteLine($"  {nm}: {(typeof(Perk).Assembly.GetType("Mutagen.Bethesda.Skyrim." + nm) != null ? "있음" : "없음")}");
+                Console.WriteLine();
+                Console.WriteLine("--- 실외로 분류된 것 (건물 없음) ---");
+                foreach (var line in outsideList.Take(20)) Console.WriteLine(line);
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "holds")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
