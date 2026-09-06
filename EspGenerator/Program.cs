@@ -31,6 +31,30 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "stewards")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var stewardFaction = new FormKey(new ModKey("Skyrim", ModType.Master), 0x050922);
+                var holdNames = new Dictionary<uint, string>
+                {
+                    { 0x0267EA, "Whiterun" }, { 0x029DB0, "Haafingar" }, { 0x0267E3, "Eastmarch" },
+                    { 0x02816B, "Rift" },     { 0x02816C, "Reach" },     { 0x028170, "Falkreath" },
+                    { 0x02816D, "Hjaalmarch" }, { 0x02816E, "Pale" },    { 0x02816F, "Winterhold" },
+                };
+
+                foreach (var npc in esm.Npcs)
+                {
+                    if (!npc.Factions.Any(fr => fr.Faction.FormKeyNullable == stewardFaction)) continue;
+                    var crime = npc.CrimeFaction.FormKeyNullable;
+                    string hold = "(홀드 아님)";
+                    if (crime != null && holdNames.TryGetValue(crime.Value.ID, out var h)) hold = h;
+                    Console.WriteLine($"  {hold,-11} {npc.Name?.String,-22} ({npc.EditorID})");
+                }
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "notes")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -629,6 +653,8 @@ namespace EspGenerator
             const uint IdLoanDueBase  = 0x840;   // game time the loan falls due, 0 = none
             const uint IdLetterBase   = 0x850;   // one dunning letter per hold
             const uint IdPrincipalBase = 0x870;  // the sum the overdue charge is figured on
+            const uint IdCleanRepayBase = 0x880; // loans settled without ever falling due
+            const uint IdAccruedDayBase = 0x890; // overdue days already charged
             const uint IdLoanTier1    = 0x860;
             const uint IdLoanTier2    = 0x861;
             const uint IdLoanTier3    = 0x862;
@@ -679,10 +705,14 @@ namespace EspGenerator
 
             var loanDue = new List<GlobalFloat>();
             var loanPrincipal = new List<GlobalFloat>();
+            var cleanRepayments = new List<GlobalFloat>();
+            var accruedDays = new List<GlobalFloat>();
             for (uint i = 0; i < holds.Length; i++)
             {
                 loanDue.Add(NewGlobal(IdLoanDueBase + i, "BankLoanDue" + holds[i].name));
                 loanPrincipal.Add(NewGlobal(IdPrincipalBase + i, "BankLoanPrincipal" + holds[i].name));
+                cleanRepayments.Add(NewGlobal(IdCleanRepayBase + i, "BankLoansRepaidClean" + holds[i].name));
+                accruedDays.Add(NewGlobal(IdAccruedDayBase + i, "BankLoanDaysCharged" + holds[i].name));
             }
 
             var merchantCreditLimit = NewGlobal(IdCreditLimit, "MerchantCreditLimit", 1000f);
@@ -693,9 +723,11 @@ namespace EspGenerator
             var loanTier2 = NewGlobal(IdLoanTier2, "BankLoanLimitTier2", 6000f);
             var loanTier3 = NewGlobal(IdLoanTier3, "BankLoanLimitTier3", 15000f);
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
-            // Charged per whole week overdue, on the original sum. Simple, not compound:
-            // it grows in a straight line and cannot run away.
-            var overduePct = NewGlobal(IdOverduePct, "BankLoanOverduePercent", 20f);
+            // Charged per DAY overdue, on the original sum. A weekly charge left the
+            // figure unchanged while letters arrived every morning, which read as broken;
+            // daily keeps the two in step. Simple, not compound, and capped at three
+            // times the principal, so it grows in a straight line and then stops.
+            var overduePct = NewGlobal(IdOverduePct, "BankLoanOverduePercentPerDay", 3f);
             // A single 20% markup applied once, when a credit purchase is written to the
             // ledger. Nothing accrues afterwards, so no timer or background script is
             // needed and the debt cannot run away on its own.
@@ -719,13 +751,16 @@ namespace EspGenerator
                     // WERoad08CourierLetter (0x1065F5).
                     Type = Book.BookType.BookOrTome,
                     Model = new Model { File = "Clutter\\Books\\Note01.nif" },
+                    // No leading [pagebreak]: it opened the note on a blank first page.
+                    // The lender is the Jarl's household, not a bank - the steward keeps
+                    // the ledger and the favour being called in is the Jarl's.
                     BookText =
-                        "[pagebreak]\n\n" +
-                        hold.korean + " 은행 채무부.\n\n" +
-                        "귀하의 대출은 이미 기한을 넘겼습니다. 장부는 매주 불어나고 있으며, " +
-                        "우리는 기다리는 데 익숙하지 않습니다.\n\n" +
-                        "청지기를 찾아 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
-                        "— " + hold.korean + " 채무부"
+                        hold.korean + " 야를궁의 장부에 귀하의 이름이 올라 있습니다.\n\n" +
+                        "야를께서 호의로 내어주신 돈은 정해진 날을 넘겼습니다. " +
+                        "장부는 하루가 지날 때마다 불어나고 있으며, 나는 기다리는 일에 익숙하지 않습니다.\n\n" +
+                        "야를의 호의를 배신하지 마십시오.\n\n" +
+                        "궁으로 찾아와 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
+                        "— " + hold.korean + " 야를의 청지기"
                 };
                 book.InventoryArt.SetTo(Vanilla(0x097788));  // the note's inventory static
                 book.PickUpSound.SetTo(Vanilla(0x0C7A54));   // ITMBookUp
@@ -785,6 +820,8 @@ namespace EspGenerator
             ListProp("CreditDebts", creditDebts);
             ListProp("LoanDue", loanDue);
             ListProp("LoanPrincipal", loanPrincipal);
+            ListProp("CleanRepayments", cleanRepayments);
+            ListProp("AccruedDays", accruedDays);
             controller.Properties.Add(BookListProp("DunningLetters", letters));
             ObjProp("HoldCrimeFactions", holdList.FormKey);
             ObjProp("MerchantCreditLimit", merchantCreditLimit.FormKey);

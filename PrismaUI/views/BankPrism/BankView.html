@@ -77,9 +77,13 @@
     .brand .hold { color: var(--gold); font-size: 20px; font-weight: bold; letter-spacing: 1px; }
     .brand .sub { color: var(--muted); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; }
 
-    .purse { text-align: right; }
-    .purse .label { color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
-    .purse .value { color: var(--text); font-size: 18px; font-weight: bold; }
+    .meters { display: flex; align-items: center; gap: 22px; }
+    .meter { text-align: right; }
+    .meter .label { color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+    .meter .value { color: var(--text); font-size: 18px; font-weight: bold; }
+    .meter .value.grade-good { color: var(--good); }
+    .meter .value.grade-mid { color: var(--gold); }
+    .meter .value.grade-bad { color: var(--bad); }
 
     /* ---- tabs ---- */
     .tabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line); }
@@ -189,11 +193,17 @@
     <div class="topbar">
       <div class="brand">
         <span class="hold" id="holdName">화이트런</span>
-        <span class="sub">은행</span>
+        <span class="sub">야를의 금고 · 청지기 장부</span>
       </div>
-      <div class="purse">
-        <div class="label">소지금</div>
-        <div class="value" id="valWallet">0 G</div>
+      <div class="meters">
+        <div class="meter">
+          <div class="label">신용</div>
+          <div class="value grade-mid" id="valGrade">보통</div>
+        </div>
+        <div class="meter">
+          <div class="label">소지금</div>
+          <div class="value" id="valWallet">0 G</div>
+        </div>
       </div>
     </div>
 
@@ -210,7 +220,7 @@
       <div class="panel active" id="panel-deposit">
         <div class="figure-row">
           <div class="figure">
-            <div class="label">예금 잔고</div>
+            <div class="label">맡긴 금액</div>
             <div class="value" id="valBalance">0 G</div>
           </div>
           <div class="figure">
@@ -285,7 +295,7 @@
         <div class="note">
           외상은 이 홀드의 잡화상에게 직접 청해야 합니다.<br>
           장부에 오를 때 20%가 가산되며, 이후 늘어나지는 않습니다.<br>
-          상환은 소지금부터, 모자라면 예금에서 빠집니다.
+          상환은 소지금부터, 모자라면 금고에서 빠집니다.
         </div>
         <div class="btn-row" style="margin-top: 14px;">
           <button class="action-btn" onclick="sendAction('payCredit')">외상값 상환</button>
@@ -311,7 +321,7 @@
 </div>
 
 <script>
-  var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0, loanLimit: 0, loanDaysLeft: 0 };
+  var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0, loanLimit: 0, loanDaysLeft: 0, overdueDays: 0 };
   var amount = 0;
   var entries = [];
   var currentTab = 'deposit';
@@ -448,16 +458,25 @@
         state.loanDaysLeft = data.loanDaysLeft;
         var due;
         if (state.debt <= 0) { due = '—'; }
-        else if (data.loanDaysLeft < 0) { due = (-data.loanDaysLeft) + '일 연체'; }
+        else if (data.loanDaysLeft < 0) { due = (-data.loanDaysLeft) + '일 지남'; }
         else { due = data.loanDaysLeft + '일 남음'; }
         setText('valLoanDue', due);
       }
+      if (data.grade !== undefined) {
+        var el = document.getElementById('valGrade');
+        el.innerText = data.grade;
+        var good = (data.grade === '신뢰' || data.grade === '우량');
+        var bad = (data.grade === '주의' || data.grade === '불량');
+        el.className = 'value ' + (good ? 'grade-good' : (bad ? 'grade-bad' : 'grade-mid'));
+      }
+      if (data.overdueDays !== undefined) { state.overdueDays = data.overdueDays; }
+
       if (state.loanLimit <= 0) {
-        setText('loanNote', '한도는 도바킨의 행적에 따릅니다. 이름 없는 칼잡이에게 내어줄 돈은 없습니다.');
-      } else if (state.loanDaysLeft < 0 && state.debt > 0) {
-        setText('loanNote', '기한이 지났습니다. 매주 원금의 일부가 더해지고, 배달부가 계속 찾아옵니다.');
+        setText('loanNote', '야를의 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.');
+      } else if (state.overdueDays > 0) {
+        setText('loanNote', '기한이 지났습니다. 하루가 지날 때마다 장부가 불어나고, 청지기가 사람을 보냅니다.');
       } else {
-        setText('loanNote', '대출에는 서명할 때 한 번 가산이 붙습니다. 기한을 넘기면 매주 더해집니다.');
+        setText('loanNote', '야를의 호의에는 서명할 때 한 번 가산이 붙습니다. 기한을 넘기면 날마다 더해집니다.');
       }
       if (data.message !== undefined) { setStatus(data.message, false); }
 

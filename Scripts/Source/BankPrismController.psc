@@ -14,6 +14,8 @@ GlobalVariable Property MerchantCreditLimit Auto
 ; --- loans ---------------------------------------------------------------
 GlobalVariable[] Property LoanDue Auto
 GlobalVariable[] Property LoanPrincipal Auto
+GlobalVariable[] Property CleanRepayments Auto
+GlobalVariable[] Property AccruedDays Auto
 Book[] Property DunningLetters Auto
 
 GlobalVariable Property LoanTier1 Auto
@@ -212,6 +214,8 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"debt\":" + debt \
         + ", \"creditDebt\":" + credit \
         + ", \"loanLimit\":" + GetLoanLimit() \
+        + ", \"overdueDays\":" + GetOverdueDays(CurrentHold) \
+        + ", \"grade\":\"" + GetCreditGrade(CurrentHold) + "\"" \
         + ", \"loanDaysLeft\":" + GetLoanDaysLeft() \
         + ", \"hold\":\"" + GetHoldName(CurrentHold) + "\"" \
         + ", \"holdKey\":\"" + GetHoldKey(CurrentHold) + "\"" \
@@ -446,40 +450,127 @@ Int Function GetLoanTermDays()
     Return term
 EndFunction
 
-; Charges every whole term that has passed since the loan came due, moving the due
-; date forward as it goes so the same week is never billed twice. The charge is a
-; share of the original sum, not of the running total, so the debt grows in a
-; straight line instead of compounding away.
+; Whole days this hold's loan has been overdue; 0 while it is still in term.
+Int Function GetOverdueDays(Int aiHold)
+    If !HoldIsValid(aiHold) || LoanDue == None
+        Return 0
+    EndIf
+    Float dueAt = LoanDue[aiHold].GetValue()
+    If dueAt <= 0.0 || BankDebts[aiHold].GetValueInt() <= 0
+        Return 0
+    EndIf
+    Int days = Math.Floor(Utility.GetCurrentGameTime() - dueAt)
+    If days < 0
+        days = 0
+    EndIf
+    Return days
+EndFunction
+
+; Charges once per day past the due date, so the ledger moves on the same rhythm as
+; the letters - a weekly charge left the figure sitting still while a courier arrived
+; every morning, which reads as broken. The charge is a share of the original sum,
+; never of the running total, and it stops at three times what was borrowed, so the
+; debt climbs in a straight line and then holds.
+;
+; The due date itself is never moved: days already charged are counted separately, so
+; the panel can still say how long the loan has been overdue.
 Function AccrueOverdue(Int aiHold)
-    If !HoldIsValid(aiHold) || LoanDue == None || LoanPrincipal == None
+    If !HoldIsValid(aiHold) || LoanDue == None || LoanPrincipal == None || AccruedDays == None
         Return
     EndIf
 
-    GlobalVariable due = LoanDue[aiHold]
     GlobalVariable ledger = BankDebts[aiHold]
-    Float dueAt = due.GetValue()
-
-    If dueAt <= 0.0 || ledger.GetValueInt() <= 0
+    Int principal = LoanPrincipal[aiHold].GetValueInt()
+    If principal <= 0 || ledger.GetValueInt() <= 0
         Return
     EndIf
 
-    Int term = GetLoanTermDays()
-    Int pct = GetGlobalInt(OverduePercent)
-    Int principal = LoanPrincipal[aiHold].GetValueInt()
-    Int charge = (principal * pct) / 100
-    Float now = Utility.GetCurrentGameTime()
-    Int weeks = 0
-
-    While now >= dueAt + term && weeks < 52
-        ledger.SetValueInt(ledger.GetValueInt() + charge)
-        dueAt += term
-        weeks += 1
-    EndWhile
-
-    If weeks > 0
-        due.SetValue(dueAt)
-        Debug.Notification(GetHoldName(aiHold) + " 채무가 연체되어 " + (charge * weeks) + " 골드가 더해졌습니다.")
+    Int overdue = GetOverdueDays(aiHold)
+    Int charged = AccruedDays[aiHold].GetValueInt()
+    Int owing = overdue - charged
+    If owing <= 0
+        Return
     EndIf
+
+    Int perDay = (principal * GetGlobalInt(OverduePercent)) / 100
+    If perDay < 1
+        perDay = 1
+    EndIf
+
+    Int ceiling = principal * 3
+    Int before = ledger.GetValueInt()
+    Int after = before + (perDay * owing)
+    If after > ceiling
+        after = ceiling
+    EndIf
+
+    AccruedDays[aiHold].SetValueInt(overdue)
+
+    If after > before
+        ledger.SetValueInt(after)
+        Debug.Notification(GetHoldName(aiHold) + " 채무 연체 " + overdue + "일. " + (after - before) + " 골드가 더해졌습니다.")
+    EndIf
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Standing with the hold
+; ---------------------------------------------------------------------------
+
+; A rough read of how this hold's court sees the player's money. Loans settled
+; before they ever came due count for the most; being overdue right now counts
+; hardest against.
+Int Function GetCreditScore(Int aiHold)
+    If !HoldIsValid(aiHold)
+        Return 0
+    EndIf
+
+    Int score = 2
+    Int clean = 0
+    If CleanRepayments
+        clean = CleanRepayments[aiHold].GetValueInt()
+    EndIf
+
+    If clean >= 5
+        score += 2
+    ElseIf clean >= 1
+        score += 1
+    EndIf
+
+    Int balance = GetGlobalInt(BankBalances[aiHold])
+    If balance >= 5000
+        score += 2
+    ElseIf balance >= 1000
+        score += 1
+    EndIf
+
+    Int overdue = GetOverdueDays(aiHold)
+    If overdue > 0
+        score -= 2
+    EndIf
+    If overdue >= 7
+        score -= 2
+    EndIf
+    If GetGlobalInt(CreditDebts[aiHold]) > 0
+        score -= 1
+    EndIf
+
+    Return score
+EndFunction
+
+String Function GetCreditGrade(Int aiHold)
+    Int score = GetCreditScore(aiHold)
+    If score >= 6
+        Return "신뢰"
+    ElseIf score >= 5
+        Return "우량"
+    ElseIf score >= 3
+        Return "양호"
+    ElseIf score >= 2
+        Return "보통"
+    ElseIf score >= 0
+        Return "주의"
+    EndIf
+    Return "불량"
 EndFunction
 
 Bool Function IsOverdue(Int aiHold)
@@ -532,6 +623,9 @@ Function TakeLoan(Int aiAmount)
     Int owed = aiAmount + ((aiAmount * pct) / 100)
 
     LoanPrincipal[CurrentHold].SetValueInt(aiAmount)
+    If AccruedDays
+        AccruedDays[CurrentHold].SetValueInt(0)
+    EndIf
     ledger.SetValueInt(owed)
     LoanDue[CurrentHold].SetValue(Utility.GetCurrentGameTime() + GetLoanTermDays())
 
@@ -585,8 +679,16 @@ Function RepayLoan(Int aiAmount, Int aiPlayerGold)
     ledger.SetValueInt(owed - paid)
 
     If owed - paid <= 0
+        ; Settled before it ever came due: that is what standing is built on.
+        If CleanRepayments && GetOverdueDays(CurrentHold) <= 0
+            GlobalVariable record = CleanRepayments[CurrentHold]
+            record.SetValueInt(record.GetValueInt() + 1)
+        EndIf
         LoanDue[CurrentHold].SetValue(0.0)
         LoanPrincipal[CurrentHold].SetValueInt(0)
+        If AccruedDays
+            AccruedDays[CurrentHold].SetValueInt(0)
+        EndIf
         RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
     Else
         RefreshTx(paid + " 골드를 갚았습니다. 남은 채무 " + (owed - paid) + " 골드.", "repay", paid)
