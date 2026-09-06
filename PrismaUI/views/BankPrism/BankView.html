@@ -92,7 +92,13 @@
   </div>
 
   <div class="input-section">
-    <input type="number" id="amountInput" class="amount-input" placeholder="금액 입력" min="0">
+    <input type="text" id="amountInput" class="amount-input" placeholder="금액 입력" autofocus>
+    <div class="btn-row">
+      <button class="action-btn small" onclick="addAmount(10)">+10</button>
+      <button class="action-btn small" onclick="addAmount(100)">+100</button>
+      <button class="action-btn small" onclick="addAmount(1000)">+1000</button>
+      <button class="action-btn small" onclick="clearAmount()">지움</button>
+    </div>
     <div class="btn-row">
       <button class="action-btn small" onclick="fillAll('wallet')">지갑 전액</button>
       <button class="action-btn small" onclick="fillAll('balance')">예금 전액</button>
@@ -133,9 +139,9 @@
 
   function handleTransaction(type) {
     var input = document.getElementById('amountInput');
-    var amount = parseInt(input.value, 10);
+    var amount = currentAmount();
 
-    if (isNaN(amount) || amount <= 0) {
+    if (amount <= 0) {
       setStatus('금액을 입력해 주세요.', true);
       return;
     }
@@ -150,15 +156,40 @@
     input.value = '';
   }
 
+  function currentAmount() {
+    var v = parseInt(document.getElementById('amountInput').value, 10);
+    return isNaN(v) ? 0 : v;
+  }
+
+  // Buttons keep the panel usable even where the field cannot be typed into.
+  function addAmount(delta) {
+    document.getElementById('amountInput').value = currentAmount() + delta;
+    setStatus('');
+  }
+
+  function clearAmount() {
+    document.getElementById('amountInput').value = '';
+    setStatus('');
+  }
+
   function fillAll(source) {
     var value = (source === 'wallet') ? state.wallet : state.balance;
     document.getElementById('amountInput').value = value > 0 ? value : '';
     setStatus('');
   }
 
-  document.getElementById('amountInput').addEventListener('keydown', function (e) {
+  var amountEl = document.getElementById('amountInput');
+
+  amountEl.addEventListener('input', function () {
+    var digits = amountEl.value.replace(/[^0-9]/g, '');
+    if (digits !== amountEl.value) { amountEl.value = digits; }
+  });
+
+  amountEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { handleTransaction('deposit'); }
   });
+
+  try { amountEl.focus(); } catch (e) { /* focus is best-effort */ }
 
   window.bankUpdateParams = function (jsonString) {
     try {

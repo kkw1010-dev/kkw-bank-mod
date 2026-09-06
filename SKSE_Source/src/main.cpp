@@ -30,8 +30,13 @@ namespace ViewState {
         if (!Ready()) return;
         if (g_prismaUI->HasFocus(g_view) == a_focused) return;
         if (a_focused) {
-            // bPauseGame = true (pause game when bank UI is open)
-            g_prismaUI->Focus(g_view, true, true); 
+            // disableFocusMenu MUST stay false. PrismaUI captures keyboard and mouse through a
+            // menu it opens itself (PrismaUI_FocusMenu); disabling it leaves the view clickable
+            // but impossible to type into, which is exactly how the amount field failed.
+            // pauseGame stays true so the game is frozen while the bank is open.
+            const bool accepted = g_prismaUI->Focus(g_view, true, false);
+            SKSE::log::info("BankPrism: Focus accepted={} hasFocus={}", accepted,
+                            g_prismaUI->HasFocus(g_view));
         } else {
             g_prismaUI->Unfocus(g_view);
         }
