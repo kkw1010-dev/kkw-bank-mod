@@ -735,6 +735,44 @@ namespace EspGenerator
             // 210 = DirectX scan code for Insert; 0 disables the test shortcut.
             var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 210f);
 
+            // Each hold's dunning letter. Only Whiterun's is written so far; the others
+            // fall back to a short generic text, so adding one later is a single case.
+            //
+            // The Jarl is named in the prose rather than looked up. Whiterun changes hands
+            // over the civil war - Vignar Gray-Mane replaces Balgruuf if the Stormcloaks
+            // take the hold - so this line goes stale in those saves. It is prose, and
+            // swapping it is a text edit, which is the trade that was chosen here.
+            string DunningLetter(string koreanHold)
+            {
+                if (koreanHold == "화이트런")
+                {
+                    return
+                        "위대한 발그루프의 청지기\n\n" +
+                        "뵐 수 있기를 기대했으나, 영지 밖에서 귀하의 위대한 대업에 대한 소문만 " +
+                        "전해 들을 뿐이군요.\n\n" +
+                        "지금 화이트런은 제국과 스톰클로크의 갈등 속에서 홀드를 지켜내기 위해 " +
+                        "재정적으로 매우 엄중한 전시 상황을 겪고 있습니다. 귀하에게 드래곤즈리치 " +
+                        "금고의 자금을 내어드린 것은, 영주님께서 용맹한 모험가이자 세상을 구할 " +
+                        "드래곤본으로써의 여정에 도움이 될 것이라 온전히 믿으셨기 때문입니다.\n" +
+                        "[pagebreak]\n" +
+                        "우리가 시정잡배 고리대꾼 처럼 무례하게 빚을 추궁하려는 것은 아닙니다. " +
+                        "다만, 화이트런이 풍전등화와 같은 전쟁의 기로에 서 있는 지금, 귀하마저 " +
+                        "우리의 신뢰를 저버리고 지원금을 방치한다면 야를의 선의는 설 자리를 " +
+                        "잃게 됩니다.\n\n" +
+                        "부디 귀하의 명예와 우리 사이의 신뢰를 기억해 주십시오. 이 서신을 보거든 " +
+                        "드래곤즈리치로 직접 저를 찾아와 야를의 호의에 대한 보답을 깨끗이 " +
+                        "매듭지어 주시길 부탁드립니다.";
+                }
+
+                return
+                    koreanHold + " 야를궁의 장부에 귀하의 이름이 올라 있습니다.\n\n" +
+                    "야를께서 호의로 내어주신 돈은 정해진 날을 넘겼습니다. 장부는 하루가 지날 " +
+                    "때마다 불어나고 있으며, 나는 기다리는 일에 익숙하지 않습니다.\n\n" +
+                    "야를의 호의를 배신하지 마십시오.\n\n" +
+                    "궁으로 찾아와 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
+                    "— " + koreanHold + " 야를의 청지기";
+            }
+
             // A letter per hold, handed to the vanilla courier when a loan falls overdue.
             var letters = new List<Book>();
             for (uint i = 0; i < holds.Length; i++)
@@ -752,15 +790,8 @@ namespace EspGenerator
                     Type = Book.BookType.BookOrTome,
                     Model = new Model { File = "Clutter\\Books\\Note01.nif" },
                     // No leading [pagebreak]: it opened the note on a blank first page.
-                    // The lender is the Jarl's household, not a bank - the steward keeps
-                    // the ledger and the favour being called in is the Jarl's.
-                    BookText =
-                        hold.korean + " 야를궁의 장부에 귀하의 이름이 올라 있습니다.\n\n" +
-                        "야를께서 호의로 내어주신 돈은 정해진 날을 넘겼습니다. " +
-                        "장부는 하루가 지날 때마다 불어나고 있으며, 나는 기다리는 일에 익숙하지 않습니다.\n\n" +
-                        "야를의 호의를 배신하지 마십시오.\n\n" +
-                        "궁으로 찾아와 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
-                        "— " + hold.korean + " 야를의 청지기"
+                    // One in the middle, because a note this long is cut off without it.
+                    BookText = DunningLetter(hold.korean)
                 };
                 book.InventoryArt.SetTo(Vanilla(0x097788));  // the note's inventory static
                 book.PickUpSound.SetTo(Vanilla(0x0C7A54));   // ITMBookUp
