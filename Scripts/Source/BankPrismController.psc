@@ -1,10 +1,9 @@
-ScriptName BankPrismController extends Quest
-{Controller for Bank & Merchant Credit System Prisma UI}
+﻿ScriptName BankPrismController extends Quest
+{Controller for the bank and merchant credit system driven by PrismaUI.}
 
 Bool Property bMenuOpen = False Auto
-MiscObject Property Gold001 Auto ; 플레이어 골드 아이템 (CK에서 0x0000000F 연결)
+MiscObject Property Gold001 Auto
 
-; Global variables placeholder (Needs to be linked in CK)
 GlobalVariable Property BankBalance Auto
 GlobalVariable Property BankDebt Auto
 GlobalVariable Property MerchantCreditDebt Auto
@@ -14,9 +13,13 @@ Event OnInit()
 EndEvent
 
 Function OpenBankMenu()
+    ; Re-register on every open. A registration made only in OnInit is lost when the
+    ; script is recompiled or the quest is reset, and the UI would then accept clicks
+    ; that never reach Papyrus - which looks exactly like the mod being broken.
+    RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     bMenuOpen = True
     BankPrismNative.OpenMenu()
-    UpdateBankUI()
+    Refresh("")
 EndFunction
 
 Function CloseBankMenu()
@@ -24,63 +27,121 @@ Function CloseBankMenu()
     BankPrismNative.CloseMenu()
 EndFunction
 
-Function UpdateBankUI()
-    Int balance = 0
-    Int debt = 0
-    Int creditDebt = 0
-    Int playerGold = Game.GetPlayer().GetItemCount(Gold001)
-    
-    If BankBalance
-        balance = BankBalance.GetValueInt()
+Int Function GetGlobalInt(GlobalVariable akGlobal)
+    If akGlobal
+        Return akGlobal.GetValueInt()
     EndIf
-    If BankDebt
-        debt = BankDebt.GetValueInt()
+    Return 0
+EndFunction
+
+; Pushes the current figures to the view, optionally with a status line.
+Function Refresh(String asMessage)
+    Int playerGold = 0
+    If Gold001
+        playerGold = Game.GetPlayer().GetItemCount(Gold001)
     EndIf
-    If MerchantCreditDebt
-        creditDebt = MerchantCreditDebt.GetValueInt()
-    EndIf
-    
-    String jsonPayload = "{\"wallet\":" + playerGold + ", \"balance\":" + balance + ", \"debt\":" + debt + ", \"creditDebt\":" + creditDebt + "}"
+
+    String jsonPayload = "{\"wallet\":" + playerGold         + ", \"balance\":" + GetGlobalInt(BankBalance)         + ", \"debt\":" + GetGlobalInt(BankDebt)         + ", \"creditDebt\":" + GetGlobalInt(MerchantCreditDebt)         + ", \"message\":\"" + asMessage + "\"}"
+
     BankPrismNative.UpdateParams(jsonPayload)
+EndFunction
+
+Function UpdateBankUI()
+    Refresh("")
+EndFunction
+
+Function Deposit(Int aiAmount, Int aiPlayerGold)
+    If BankBalance == None || Gold001 == None
+        Refresh("은행 계좌를 사용할 수 없습니다.")
+    ElseIf aiAmount <= 0
+        Refresh("금액을 확인해 주세요.")
+    ElseIf aiPlayerGold < aiAmount
+        Refresh("지갑에 골드가 부족합니다.")
+    Else
+        ; Take the gold only after every check has passed. Removing it first meant a
+        ; failed check destroyed the player's gold without crediting the account.
+        Game.GetPlayer().RemoveItem(Gold001, aiAmount, True)
+        BankBalance.SetValueInt(BankBalance.GetValueInt() + aiAmount)
+        Refresh(aiAmount + " 골드를 입금했습니다.")
+    EndIf
+EndFunction
+
+Function Withdraw(Int aiAmount)
+    If BankBalance == None || Gold001 == None
+        Refresh("은행 계좌를 사용할 수 없습니다.")
+    ElseIf aiAmount <= 0
+        Refresh("금액을 확인해 주세요.")
+    ElseIf BankBalance.GetValueInt() < aiAmount
+        Refresh("예금 잔고가 부족합니다.")
+    Else
+        BankBalance.SetValueInt(BankBalance.GetValueInt() - aiAmount)
+        Game.GetPlayer().AddItem(Gold001, aiAmount, True)
+        Refresh(aiAmount + " 골드를 출금했습니다.")
+    EndIf
+EndFunction
+
+; Provisional: settles as much merchant credit as the player can actually pay,
+; wallet first and then the account. The final rules wait on the credit design.
+Function PayMerchantCredit(Int aiPlayerGold)
+    If MerchantCreditDebt == None
+        Refresh("외상 정보를 사용할 수 없습니다.")
+        Return
+    EndIf
+
+    Int owed = MerchantCreditDebt.GetValueInt()
+    If owed <= 0
+        Refresh("상환할 외상금이 없습니다.")
+        Return
+    EndIf
+
+    Int fromWallet = aiPlayerGold
+    If fromWallet > owed
+        fromWallet = owed
+    EndIf
+
+    Int remaining = owed - fromWallet
+    Int fromBank = GetGlobalInt(BankBalance)
+    If fromBank > remaining
+        fromBank = remaining
+    EndIf
+
+    Int paid = fromWallet + fromBank
+    If paid <= 0
+        Refresh("상환할 골드가 없습니다.")
+        Return
+    EndIf
+
+    If fromWallet > 0
+        Game.GetPlayer().RemoveItem(Gold001, fromWallet, True)
+    EndIf
+    If fromBank > 0
+        BankBalance.SetValueInt(BankBalance.GetValueInt() - fromBank)
+    EndIf
+    MerchantCreditDebt.SetValueInt(owed - paid)
+
+    If owed - paid > 0
+        Refresh(paid + " 골드를 상환했습니다. 남은 외상금 " + (owed - paid) + " 골드.")
+    Else
+        Refresh("외상금을 모두 상환했습니다.")
+    EndIf
 EndFunction
 
 Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form sender)
     Int amount = Math.Floor(numArg)
-    Int playerGold = Game.GetPlayer().GetItemCount(Gold001)
+    Int playerGold = 0
+    If Gold001
+        playerGold = Game.GetPlayer().GetItemCount(Gold001)
+    EndIf
 
     If strArg == "close"
         CloseBankMenu()
-        
     ElseIf strArg == "deposit"
-        If amount > 0 && playerGold >= amount
-            Game.GetPlayer().RemoveItem(Gold001, amount, True)
-            If BankBalance
-                BankBalance.SetValueInt(BankBalance.GetValueInt() + amount)
-            EndIf
-            Debug.Notification(amount + " 골드를 입금했습니다.")
-            UpdateBankUI()
-        Else
-            Debug.Notification("입금할 골드가 부족합니다.")
-        EndIf
-
+        Deposit(amount, playerGold)
     ElseIf strArg == "withdraw"
-        If amount > 0 && BankBalance && BankBalance.GetValueInt() >= amount
-            BankBalance.SetValueInt(BankBalance.GetValueInt() - amount)
-            Game.GetPlayer().AddItem(Gold001, amount, True)
-            Debug.Notification(amount + " 골드를 출금했습니다.")
-            UpdateBankUI()
-        Else
-            Debug.Notification("은행 잔고가 부족합니다.")
-        EndIf
-
+        Withdraw(amount)
     ElseIf strArg == "payCredit"
-        If MerchantCreditDebt
-            MerchantCreditDebt.SetValueInt(0)
-            Debug.Notification("외상값을 상환합니다.")
-        EndIf
-        UpdateBankUI()
-        
+        PayMerchantCredit(playerGold)
     ElseIf strArg == "sellBond"
-        Debug.Notification("채권을 판매합니다. 서드파티 모드를 연동합니다.")
+        Refresh("채권 매각은 서드파티 연동 후 사용할 수 있습니다.")
     EndIf
 EndEvent

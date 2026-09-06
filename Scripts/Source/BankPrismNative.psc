@@ -1,4 +1,4 @@
-ScriptName BankPrismNative Hidden
+﻿ScriptName BankPrismNative Hidden
 {Native bridge to the BankPrismNative SKSE plugin.
  Signatures must match RegisterFuncs() in SKSE_Source/src/main.cpp.}
 

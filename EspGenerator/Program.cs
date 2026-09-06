@@ -217,6 +217,16 @@ namespace EspGenerator
                 Console.WriteLine($"  GLOB {g.FormKey.ID:X6} {g.EditorID}");
             foreach (var q in check.Quests)
                 Console.WriteLine($"  QUST {q.FormKey.ID:X6} {q.EditorID} scripts={q.VirtualMachineAdapter?.Scripts.Count ?? 0} flags={q.Flags} priority={q.Priority} type={q.Type}");
+            foreach (var q in check.Quests)
+                foreach (var sc in q.VirtualMachineAdapter?.Scripts ?? Enumerable.Empty<IScriptEntryGetter>())
+                {
+                    Console.WriteLine($"    script {sc.Name} props={sc.Properties.Count}");
+                    foreach (var pr in sc.Properties)
+                    {
+                        var obj = pr as IScriptObjectPropertyGetter;
+                        Console.WriteLine($"      {pr.Name} type={pr.GetType().Name} -> {obj?.Object.FormKeyNullable?.ToString() ?? "(not object)"}");
+                    }
+                }
             foreach (var b in check.DialogBranches)
                 Console.WriteLine($"  DLBR {b.FormKey.ID:X6} {b.EditorID} quest={b.Quest.FormKeyNullable} start={b.StartingTopic.FormKeyNullable} flags={b.Flags} cat={b.Category}");
             foreach (var d in check.DialogTopics)

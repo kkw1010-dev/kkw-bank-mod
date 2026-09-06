@@ -1,4 +1,4 @@
-; BEGIN FRAGMENT CODE - Do not edit anything between this and the end comment
+﻿; BEGIN FRAGMENT CODE - Do not edit anything between this and the end comment
 ; NEXT FRAGMENT INDEX 1
 Scriptname BankPrismDialogueFragment Extends TopicInfo Hidden
 

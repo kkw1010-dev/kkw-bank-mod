@@ -85,6 +85,17 @@ are easy to get wrong here and are deliberately handled in code:
   -o="C:\TAKEALOOK\BankPrismUI\Scripts"
 ```
 
+Papyrus sources **must be saved as UTF-8 with a BOM**. The compiler reads a
+BOM-less UTF-8 file as the system ANSI codepage, which turns every Korean string
+into unrelated CJK characters in the `.pex` while still reporting a successful
+compile. Compiling the same string from three encodings gives:
+
+| source encoding | compiles | Korean in `.pex` |
+| --- | --- | --- |
+| UTF-8, no BOM | fails, or silently mangles | broken |
+| UTF-8 with BOM | yes | correct |
+| cp949 | yes | correct |
+
 ### 3. SKSE plugin (`BankPrismNative.dll`)
 
 Requires Visual Studio 2026 Build Tools and CommonLibSSE-NG. The library is
