@@ -9,6 +9,9 @@ GlobalVariable Property BankDebt Auto
 GlobalVariable Property MerchantCreditDebt Auto
 GlobalVariable Property MerchantCreditLimit Auto
 
+; Test shortcut. DirectX scan code; 210 is Insert. Set to 0 to disable.
+GlobalVariable Property DebugHotkey Auto
+
 ; Set while a credit barter is in flight, so OnMenuClose knows the BarterMenu it sees
 ; is ours and how much was lent. Hidden properties so they survive a save.
 Bool Property bCreditBarterActive = False Auto Hidden
@@ -17,6 +20,28 @@ Int Property CreditGoldBefore = 0 Auto Hidden
 
 Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
+    RegisterDebugHotkey()
+EndEvent
+
+; A hotkey costs ten lines and no dependencies. An MCM would need MCM Helper plus a
+; config json, and SKSE Menu Framework would need ImGui integration in the plugin -
+; both far more machinery than opening the bank for a test is worth.
+Function RegisterDebugHotkey()
+    ; Not named 'key': Key is an existing Skyrim script type and the name is reserved.
+    Int iKeyCode = 210
+    If DebugHotkey
+        iKeyCode = DebugHotkey.GetValueInt()
+    EndIf
+    If iKeyCode > 0
+        RegisterForKey(iKeyCode)
+    EndIf
+EndFunction
+
+Event OnKeyDown(Int aiKeyCode)
+    If bMenuOpen || Utility.IsInMenuMode()
+        Return
+    EndIf
+    OpenBankMenu()
 EndEvent
 
 Function OpenBankMenu()
@@ -24,6 +49,7 @@ Function OpenBankMenu()
     ; script is recompiled or the quest is reset, and the UI would then accept clicks
     ; that never reach Papyrus - which looks exactly like the mod being broken.
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
+    RegisterDebugHotkey()
     bMenuOpen = True
     BankPrismNative.OpenMenu()
     Refresh("")

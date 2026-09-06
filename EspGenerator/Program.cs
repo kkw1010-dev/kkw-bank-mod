@@ -158,11 +158,30 @@ namespace EspGenerator
 
             var mod = new SkyrimMod(ModKey.FromNameAndExtension("BankPrismUI.esp"), SkyrimRelease.SkyrimSE);
 
+            // Record FormIDs are pinned. Mutagen hands out the next free id in creation
+            // order, so inserting a record used to shift every later one - which moves a
+            // running quest out from under an existing save and silently kills its
+            // dialogue. New records take a new id at the end; nothing above ever moves.
+            const uint IdBankBalance        = 0x800;
+            const uint IdBankDebt           = 0x801;
+            const uint IdMerchantCreditDebt = 0x802;
+            const uint IdQuest              = 0x803;
+            const uint IdBankTopic          = 0x804;
+            const uint IdBankBranch         = 0x805;
+            const uint IdBankInfo           = 0x806;
+            const uint IdCreditLimit        = 0x807;
+            const uint IdCreditTopic        = 0x808;
+            const uint IdCreditBranch       = 0x809;
+            const uint IdCreditInfo         = 0x80A;
+            const uint IdDebugHotkey        = 0x80B;
+
+            FormKey Id(uint value) => new FormKey(mod.ModKey, value);
+
             // ---- 1. Global variables -------------------------------------------------
             // Global is abstract in Mutagen; GlobalFloat must be constructed directly.
-            GlobalFloat NewGlobal(string edid, float value = 0f)
+            GlobalFloat NewGlobal(uint id, string edid, float value = 0f)
             {
-                var g = new GlobalFloat(mod.GetNextFormKey(), SkyrimRelease.SkyrimSE)
+                var g = new GlobalFloat(Id(id), SkyrimRelease.SkyrimSE)
                 {
                     EditorID = edid,
                     Data = value
@@ -171,13 +190,16 @@ namespace EspGenerator
                 return g;
             }
 
-            var bankBalance = NewGlobal("BankBalance");
-            var bankDebt = NewGlobal("BankDebt");
-            var merchantCreditDebt = NewGlobal("MerchantCreditDebt");
-            var merchantCreditLimit = NewGlobal("MerchantCreditLimit", 1000f);
+            var bankBalance = NewGlobal(IdBankBalance, "BankBalance");
+            var bankDebt = NewGlobal(IdBankDebt, "BankDebt");
+            var merchantCreditDebt = NewGlobal(IdMerchantCreditDebt, "MerchantCreditDebt");
+            var merchantCreditLimit = NewGlobal(IdCreditLimit, "MerchantCreditLimit", 1000f);
+            // 210 = DirectX scan code for Insert; 0 disables the test shortcut.
+            var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 210f);
 
             // ---- 2. Controller quest -------------------------------------------------
-            var bankQuest = mod.Quests.AddNew("BankPrismQuest");
+            var bankQuest = new Quest(Id(IdQuest), SkyrimRelease.SkyrimSE) { EditorID = "BankPrismQuest" };
+            mod.Quests.Add(bankQuest);
             bankQuest.Name = "Bank Prism Quest";
             bankQuest.Flags |= Quest.Flag.StartGameEnabled;
             // Vanilla dialogue quests carry a real priority (40-70) and a type;
@@ -194,6 +216,7 @@ namespace EspGenerator
             controller.Properties.Add(new ScriptObjectProperty { Name = "BankDebt", Object = bankDebt.ToLink<ISkyrimMajorRecordGetter>() });
             controller.Properties.Add(new ScriptObjectProperty { Name = "MerchantCreditDebt", Object = merchantCreditDebt.ToLink<ISkyrimMajorRecordGetter>() });
             controller.Properties.Add(new ScriptObjectProperty { Name = "MerchantCreditLimit", Object = merchantCreditLimit.ToLink<ISkyrimMajorRecordGetter>() });
+            controller.Properties.Add(new ScriptObjectProperty { Name = "DebugHotkey", Object = debugHotkey.ToLink<ISkyrimMajorRecordGetter>() });
             controller.Properties.Add(new ScriptObjectProperty { Name = "Gold001", Object = Gold001.ToLink<ISkyrimMajorRecordGetter>() });
 
             bankQuest.VirtualMachineAdapter = new QuestAdapter();
@@ -202,9 +225,11 @@ namespace EspGenerator
             // ---- 3. Dialogue ---------------------------------------------------------
             // Every vanilla player topic belongs to a top-level DialogBranch. A topic
             // without one is never offered in the dialogue menu at all.
-            void AddTopic(string id, string prompt, string response, FormKey speaker, string fragment)
+            void AddTopic(string id, uint topicId, uint branchId, uint infoId,
+                          string prompt, string response, FormKey speaker, string fragment)
             {
-                var topic = mod.DialogTopics.AddNew();
+                var topic = new DialogTopic(Id(topicId), SkyrimRelease.SkyrimSE);
+                mod.DialogTopics.Add(topic);
                 topic.EditorID = id + "Topic";
                 topic.Quest.SetTo(bankQuest);
                 topic.Name = prompt;
@@ -213,7 +238,8 @@ namespace EspGenerator
                 topic.Subtype = DialogTopic.SubtypeEnum.Custom;
                 topic.SubtypeName = new RecordType("CUST");
 
-                var branch = mod.DialogBranches.AddNew();
+                var branch = new DialogBranch(Id(branchId), SkyrimRelease.SkyrimSE);
+                mod.DialogBranches.Add(branch);
                 branch.EditorID = id + "Branch";
                 branch.Quest.SetTo(bankQuest);
                 branch.Flags = DialogBranch.Flag.TopLevel;
@@ -221,7 +247,7 @@ namespace EspGenerator
                 branch.StartingTopic.SetTo(topic);
                 topic.Branch.SetTo(branch);
 
-                var info = new DialogResponses(mod.GetNextFormKey(), SkyrimRelease.SkyrimSE)
+                var info = new DialogResponses(Id(infoId), SkyrimRelease.SkyrimSE)
                 {
                     EditorID = id + "Info",
                     Prompt = prompt
@@ -266,7 +292,7 @@ namespace EspGenerator
                 topic.Responses.Add(info);
             }
 
-            AddTopic("BankPrismBank",
+            AddTopic("BankPrismBank", IdBankTopic, IdBankBranch, IdBankInfo,
                      "은행 업무를 보고 싶습니다.",
                      "물론입니다. 어떤 업무를 도와드릴까요?",
                      ProventusAvenicci, "BankPrismDialogueFragment");
@@ -274,7 +300,7 @@ namespace EspGenerator
             // Merchant credit is limited to Belethor while the mechanic is being tested.
             // Widening it later is a matter of calling AddTopic for more speakers, or
             // replacing the GetIsID condition with one OR clause per vendor faction.
-            AddTopic("BankPrismCredit",
+            AddTopic("BankPrismCredit", IdCreditTopic, IdCreditBranch, IdCreditInfo,
                      "외상으로 거래하고 싶습니다.",
                      "장부에 달아 두지요. 갚는 것만 잊지 마시오.",
                      Belethor, "BankPrismCreditFragment");
@@ -321,7 +347,10 @@ namespace EspGenerator
                 {
                     Console.WriteLine($"    INFO {r.FormKey.ID:X6} {r.EditorID} conditions={r.Conditions.Count} responses={r.Responses.Count}");
                     foreach (var c in r.Conditions)
-                        Console.WriteLine($"      cond: {c.Data.GetType().Name}");
+                    {
+                        var gid = c.Data as IGetIsIDConditionDataGetter;
+                        Console.WriteLine($"      cond: {c.Data.GetType().Name} target={gid?.Object.Link.FormKeyNullable?.ToString() ?? "(NONE)"} op={c.CompareOperator}");
+                    }
                     var frag = r.VirtualMachineAdapter?.ScriptFragments;
                     Console.WriteLine($"      fragment file={frag?.FileName} onBegin={frag?.OnBegin?.ScriptName}.{frag?.OnBegin?.FragmentName}");
                 }
