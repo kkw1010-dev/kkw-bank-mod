@@ -7,6 +7,13 @@ MiscObject Property Gold001 Auto
 GlobalVariable Property BankBalance Auto
 GlobalVariable Property BankDebt Auto
 GlobalVariable Property MerchantCreditDebt Auto
+GlobalVariable Property MerchantCreditLimit Auto
+
+; Set while a credit barter is in flight, so OnMenuClose knows the BarterMenu it sees
+; is ours and how much was lent. Hidden properties so they survive a save.
+Bool Property bCreditBarterActive = False Auto Hidden
+Int Property CreditLentAmount = 0 Auto Hidden
+Int Property CreditGoldBefore = 0 Auto Hidden
 
 Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
@@ -131,6 +138,84 @@ Function PayMerchantCredit(Int aiPlayerGold)
         RefreshTx("외상금을 모두 상환했습니다.", "payCredit", paid)
     EndIf
 EndFunction
+
+; Merchant credit works by lending the player gold, letting them use the ordinary
+; vanilla barter window, and converting whatever they actually spent into debt when
+; the window closes. Copying the merchant's stock into our own container would lose
+; restocking, speech-perk pricing, the merchant's own gold, and selling back to them.
+Function BeginCreditBarter(Actor akMerchant)
+    If akMerchant == None || Gold001 == None || MerchantCreditDebt == None
+        Debug.Notification("외상 거래를 사용할 수 없습니다.")
+        Return
+    EndIf
+    If bCreditBarterActive
+        Return
+    EndIf
+
+    Int limit = 1000
+    If MerchantCreditLimit
+        limit = MerchantCreditLimit.GetValueInt()
+    EndIf
+
+    Int available = limit - MerchantCreditDebt.GetValueInt()
+    If available <= 0
+        Debug.Notification("외상 한도를 모두 사용했습니다.")
+        Return
+    EndIf
+
+    Actor player = Game.GetPlayer()
+    CreditGoldBefore = player.GetItemCount(Gold001)
+    CreditLentAmount = available
+    bCreditBarterActive = True
+
+    RegisterForMenu("BarterMenu")
+    player.AddItem(Gold001, available, True)
+    akMerchant.ShowBarterMenu()
+EndFunction
+
+Event OnMenuClose(String menuName)
+    If menuName != "BarterMenu" || !bCreditBarterActive
+        Return
+    EndIf
+
+    UnregisterForMenu("BarterMenu")
+    bCreditBarterActive = False
+
+    Actor player = Game.GetPlayer()
+    Int goldAfter = player.GetItemCount(Gold001)
+    Int lent = CreditLentAmount
+
+    ; Credit is spent before the player's own gold. Anything of the loan still in the
+    ; purse is taken back; the rest becomes debt. Selling to the merchant leaves the
+    ; player richer than they started, and that income is theirs to keep.
+    Int reclaim = goldAfter - CreditGoldBefore
+    If reclaim < 0
+        reclaim = 0
+    ElseIf reclaim > lent
+        reclaim = lent
+    EndIf
+
+    Int owed = (CreditGoldBefore + lent) - goldAfter
+    If owed < 0
+        owed = 0
+    ElseIf owed > lent
+        owed = lent
+    EndIf
+
+    If reclaim > 0
+        player.RemoveItem(Gold001, reclaim, True)
+    EndIf
+
+    If owed > 0
+        MerchantCreditDebt.SetValueInt(MerchantCreditDebt.GetValueInt() + owed)
+        Debug.Notification(owed + " 골드를 외상으로 달았습니다.")
+    Else
+        Debug.Notification("외상으로 구매한 물건이 없습니다.")
+    EndIf
+
+    CreditLentAmount = 0
+    CreditGoldBefore = 0
+EndEvent
 
 Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form sender)
     Int amount = Math.Floor(numArg)

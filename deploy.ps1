@@ -16,31 +16,35 @@ $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 $dest = Join-Path $ModsRoot $ModName
 
+# Fixed single files. Scripts are enumerated instead of listed, so a newly added
+# fragment is deployed without anyone remembering to edit this script.
 $files = @(
-    @{ From = 'BankPrismUI.esp';                              To = 'BankPrismUI.esp' }
-    @{ From = 'Scripts\BankPrismController.pex';              To = 'Scripts\BankPrismController.pex' }
-    @{ From = 'Scripts\BankPrismDialogueFragment.pex';        To = 'Scripts\BankPrismDialogueFragment.pex' }
-    @{ From = 'Scripts\BankPrismNative.pex';                  To = 'Scripts\BankPrismNative.pex' }
-    @{ From = 'Scripts\Source\BankPrismController.psc';       To = 'Scripts\Source\BankPrismController.psc' }
-    @{ From = 'Scripts\Source\BankPrismDialogueFragment.psc'; To = 'Scripts\Source\BankPrismDialogueFragment.psc' }
-    @{ From = 'Scripts\Source\BankPrismNative.psc';           To = 'Scripts\Source\BankPrismNative.psc' }
-    @{ From = 'SKSE\Plugins\BankPrismNative.dll';             To = 'SKSE\Plugins\BankPrismNative.dll' }
-    @{ From = 'PrismaUI\views\BankPrism\BankView.html';       To = 'PrismaUI\views\BankPrism\BankView.html' }
+    'BankPrismUI.esp'
+    'SKSE\Plugins\BankPrismNative.dll'
+    'PrismaUI\views\BankPrism\BankView.html'
 )
 
-$missing = $files | Where-Object { -not (Test-Path (Join-Path $repo $_.From)) }
+foreach ($pattern in @('Scripts\*.pex', 'Scripts\Source\*.psc')) {
+    $found = Get-ChildItem -Path (Join-Path $repo $pattern) -File -ErrorAction SilentlyContinue
+    if (-not $found) { throw "No files matched $pattern - build before deploying." }
+    foreach ($f in $found) {
+        $files += $f.FullName.Substring($repo.Length + 1)
+    }
+}
+
+$missing = $files | Where-Object { -not (Test-Path (Join-Path $repo $_)) }
 if ($missing) {
-    foreach ($m in $missing) { Write-Host "MISSING: $($m.From)" }
+    foreach ($m in $missing) { Write-Host "MISSING: $m" }
     throw "$($missing.Count) source file(s) missing - build them before deploying."
 }
 
-foreach ($f in $files) {
-    $src = Join-Path $repo $f.From
-    $dst = Join-Path $dest $f.To
+foreach ($rel in $files) {
+    $src = Join-Path $repo $rel
+    $dst = Join-Path $dest $rel
     $dir = Split-Path $dst -Parent
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     Copy-Item -Path $src -Destination $dst -Force
-    Write-Host "  $($f.To)"
+    Write-Host "  $rel"
 }
 
 $meta = Join-Path $dest 'meta.ini'
