@@ -19,12 +19,55 @@ namespace EspGenerator
         static readonly FormKey Belethor =
             new FormKey(new ModKey("Skyrim", ModType.Master), 0x013BA1);
 
+        // His vendor faction. Conditioning on the faction rather than the actor survives
+        // NPC overhauls that replace the record, and is the same mechanism a wider
+        // merchant scope would use later.
+        static readonly FormKey BelethorsGoodsFaction =
+            new FormKey(new ModKey("Skyrim", ModType.Master), 0x09CAF5);
+
         // Gold001
         static readonly FormKey Gold001 =
             new FormKey(new ModKey("Skyrim", ModType.Master), 0x00000F);
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "belethor")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                var target = new FormKey(new ModKey("Skyrim", ModType.Master), 0x013BA1);
+                var vendorFac = new FormKey(new ModKey("Skyrim", ModType.Master), 0x09CAF5);
+                var quests = esm.Quests.ToDictionary(q => q.FormKey);
+
+                int shown = 0;
+                foreach (var d in esm.DialogTopics)
+                {
+                    bool hit = false;
+                    foreach (var r in d.Responses)
+                        foreach (var c in r.Conditions)
+                        {
+                            if (c.Data is IGetIsIDConditionDataGetter g &&
+                                g.Object.Link.FormKeyNullable == target) hit = true;
+                            if (c.Data is IGetInFactionConditionDataGetter f &&
+                                f.Faction.Link.FormKeyNullable == vendorFac) hit = true;
+                        }
+                    if (!hit) continue;
+
+                    var qk = d.Quest.FormKeyNullable;
+                    quests.TryGetValue(qk ?? default, out var q);
+                    var br = esm.DialogBranches.FirstOrDefault(b => b.FormKey == d.Branch.FormKeyNullable);
+
+                    Console.WriteLine($"DIAL {d.FormKey.ID:X6} {d.EditorID}");
+                    Console.WriteLine($"   prio={d.Priority} cat={d.Category} sub={d.Subtype} flags={d.TopicFlags}");
+                    Console.WriteLine($"   branch={(br == null ? "(none)" : br.EditorID + " flags=" + br.Flags + " cat=" + br.Category)}");
+                    Console.WriteLine($"   quest={(q == null ? "(none)" : q.EditorID + " prio=" + q.Priority + " flags=" + q.Flags + " type=" + q.Type)}");
+                    if (++shown >= 8) break;
+                }
+                Console.WriteLine($"총 {shown}건 표시");
+                return;
+            }
+
             if (args.Length > 1 && args[0] == "npc")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -226,7 +269,8 @@ namespace EspGenerator
             // Every vanilla player topic belongs to a top-level DialogBranch. A topic
             // without one is never offered in the dialogue menu at all.
             void AddTopic(string id, uint topicId, uint branchId, uint infoId,
-                          string prompt, string response, FormKey speaker, string fragment)
+                          string prompt, string response, FormKey speaker, string fragment,
+                          bool speakerIsFaction = false)
             {
                 var topic = new DialogTopic(Id(topicId), SkyrimRelease.SkyrimSE);
                 mod.DialogTopics.Add(topic);
@@ -260,13 +304,25 @@ namespace EspGenerator
                     Emotion = Emotion.Neutral
                 });
 
-                var isSpeaker = new GetIsIDConditionData();
-                isSpeaker.Object.Link.SetTo(speaker);
+                ConditionData speakerCondition;
+                if (speakerIsFaction)
+                {
+                    var inFaction = new GetInFactionConditionData();
+                    inFaction.Faction.Link.SetTo(speaker);
+                    speakerCondition = inFaction;
+                }
+                else
+                {
+                    var isId = new GetIsIDConditionData();
+                    isId.Object.Link.SetTo(speaker);
+                    speakerCondition = isId;
+                }
+
                 info.Conditions.Add(new ConditionFloat
                 {
                     CompareOperator = CompareOperator.EqualTo,
                     ComparisonValue = 1f,
-                    Data = isSpeaker
+                    Data = speakerCondition
                 });
 
                 var entry = new ScriptEntry { Name = fragment, Flags = ScriptEntry.Flag.Local };
@@ -303,7 +359,7 @@ namespace EspGenerator
             AddTopic("BankPrismCredit", IdCreditTopic, IdCreditBranch, IdCreditInfo,
                      "외상으로 거래하고 싶습니다.",
                      "장부에 달아 두지요. 갚는 것만 잊지 마시오.",
-                     Belethor, "BankPrismCreditFragment");
+                     BelethorsGoodsFaction, "BankPrismCreditFragment", speakerIsFaction: true);
 
             // ---- 4. Write ------------------------------------------------------------
             var outputPath = Path.Combine(
@@ -349,7 +405,10 @@ namespace EspGenerator
                     foreach (var c in r.Conditions)
                     {
                         var gid = c.Data as IGetIsIDConditionDataGetter;
-                        Console.WriteLine($"      cond: {c.Data.GetType().Name} target={gid?.Object.Link.FormKeyNullable?.ToString() ?? "(NONE)"} op={c.CompareOperator}");
+                        var gfa = c.Data as IGetInFactionConditionDataGetter;
+                        var tgt = gid?.Object.Link.FormKeyNullable?.ToString()
+                               ?? gfa?.Faction.Link.FormKeyNullable?.ToString() ?? "(NONE)";
+                        Console.WriteLine($"      cond: {c.Data.GetType().Name} target={tgt} op={c.CompareOperator}");
                     }
                     var frag = r.VirtualMachineAdapter?.ScriptFragments;
                     Console.WriteLine($"      fragment file={frag?.FileName} onBegin={frag?.OnBegin?.ScriptName}.{frag?.OnBegin?.FragmentName}");
