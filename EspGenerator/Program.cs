@@ -31,6 +31,32 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "qflags")
+            {
+                Console.WriteLine("=== Mutagen Quest.Flag 값 ===");
+                foreach (var name in Enum.GetNames(typeof(Quest.Flag)))
+                    Console.WriteLine($"  0x{(int)Enum.Parse(typeof(Quest.Flag), name):X3}  {name}");
+
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                Console.WriteLine();
+                Console.WriteLine("=== 바닐라 대화 퀘스트의 플래그 ===");
+                foreach (var q in esm.Quests)
+                {
+                    var e = q.EditorID ?? "";
+                    if (e != "DialogueWhiterun" && e != "DialogueRiverwood" && e != "DialogueGeneric"
+                        && e != "DialogueFavorGeneric" && e != "PerkInvestor") continue;
+                    Console.WriteLine($"  {e,-22} flags=0x{(int)q.Flags:X3} ({q.Flags})  prio={q.Priority} type={q.Type} stages={q.Stages.Count} aliases={q.Aliases.Count}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("=== 우리 퀘스트 ===");
+                using var ours = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/BankPrismUI/BankPrismUI.esp", SkyrimRelease.SkyrimSE);
+                foreach (var q in ours.Quests)
+                    Console.WriteLine($"  {q.EditorID,-22} flags=0x{(int)q.Flags:X3} ({q.Flags})  prio={q.Priority} type={q.Type} stages={q.Stages.Count} aliases={q.Aliases.Count}");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "strict")
             {
                 // The overlay reader is lazy and will happily skip past a record the game
@@ -848,9 +874,15 @@ namespace EspGenerator
             var bankQuest = new Quest(Id(IdQuest), SkyrimRelease.SkyrimSE) { EditorID = "BankPrismQuest" };
             mod.Quests.Add(bankQuest);
             bankQuest.Name = "Bank Prism Quest";
+            // Match what every vanilla dialogue quest carries. DialogueWhiterun,
+            // DialogueGeneric and DialogueFavorGeneric are all flags 0x011, type None -
+            // 0x011 being StartGameEnabled plus bit 0x010, which neither Mutagen nor
+            // xEdit names but which no vanilla dialogue quest is without. Ours was 0x001
+            // and type Misc, the only quest offering player topics shaped that way.
             bankQuest.Flags |= Quest.Flag.StartGameEnabled;
+            bankQuest.Flags |= (Quest.Flag)0x010;
             bankQuest.Priority = 50;
-            bankQuest.Type = Quest.TypeEnum.Misc;
+            bankQuest.Type = Quest.TypeEnum.None;
 
             var controller = new ScriptEntry
             {
