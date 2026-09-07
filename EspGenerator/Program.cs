@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.IO;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Skyrim;
@@ -29,8 +31,274 @@ namespace EspGenerator
         static readonly FormKey Gold001 =
             new FormKey(new ModKey("Skyrim", ModType.Master), 0x00000F);
 
+        // Mutagen's rank title shape has moved between versions; read it reflectively
+        // so a probe never fails to build over a cosmetic label.
+        static string RankTitle(object rank)
+        {
+            foreach (var name in new[] { "Title", "MaleTitle", "FemaleTitle" })
+            {
+                var pi = rank.GetType().GetProperty(name);
+                var v = pi?.GetValue(rank);
+                if (v == null) continue;
+                var male = v.GetType().GetProperty("Male")?.GetValue(v) ?? v;
+                var str = male?.ToString();
+                if (!string.IsNullOrWhiteSpace(str)) return "\"" + str + "\"";
+            }
+            return "";
+        }
+
+        // The comparison value lives on a different member per Mutagen version
+        // (ComparisonValue / Float / Data.ComparisonValue); read it reflectively.
+        static string CondValue(object cond)
+        {
+            foreach (var name in new[] { "ComparisonValue", "Float", "Value" })
+            {
+                var v = cond.GetType().GetProperty(name)?.GetValue(cond);
+                if (v != null) return v.ToString() ?? "";
+            }
+            return "?";
+        }
+
         static void Main(string[] args)
         {
+            // Generic record search. Added because judging tier requirements from
+            // memory is exactly the guessing this project keeps getting burned by:
+            // "there is no Thane faction" was only settled by looking.
+            //   dotnet run -- find <keyword> [qust|fact|glob|perk]
+            if (args.Length > 1 && args[0] == "find")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                string needle = args[1];
+                string only = args.Length > 2 ? args[2].ToLowerInvariant() : "";
+                bool Want(string kind) => only.Length == 0 || only == kind;
+                bool Hit(string? e) =>
+                    e != null && e.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (Want("qust"))
+                {
+                    Console.WriteLine($"=== QUST ~ \"{needle}\" ===");
+                    foreach (var q in esm.Quests)
+                        if (Hit(q.EditorID))
+                            Console.WriteLine($"  {q.FormKey.ID:X6}  {q.EditorID,-34} \"{q.Name}\" stages={q.Stages.Count}");
+                }
+
+                if (Want("fact"))
+                {
+                    Console.WriteLine($"=== FACT ~ \"{needle}\" ===");
+                    foreach (var f in esm.Factions)
+                        if (Hit(f.EditorID))
+                        {
+                            Console.WriteLine($"  {f.FormKey.ID:X6}  {f.EditorID,-34} ranks={f.Ranks.Count}");
+                            foreach (var r in f.Ranks)
+                                Console.WriteLine($"        rank {r.Number,-3} {RankTitle(r)}");
+                        }
+                }
+
+                if (Want("glob"))
+                {
+                    Console.WriteLine($"=== GLOB ~ \"{needle}\" ===");
+                    foreach (var g in esm.Globals)
+                        if (Hit(g.EditorID))
+                        {
+                            string val = g switch
+                            {
+                                IGlobalIntGetter gi => gi.Data?.ToString() ?? "(null)",
+                                IGlobalShortGetter gs => gs.Data?.ToString() ?? "(null)",
+                                IGlobalFloatGetter gf => gf.Data?.ToString() ?? "(null)",
+                                _ => "(?)"
+                            };
+                            Console.WriteLine($"  {g.FormKey.ID:X6}  {g.EditorID,-34} = {val}");
+                        }
+                }
+
+                if (Want("perk"))
+                {
+                    Console.WriteLine($"=== PERK ~ \"{needle}\" ===");
+                    foreach (var pk in esm.Perks)
+                        if (Hit(pk.EditorID))
+                            Console.WriteLine($"  {pk.FormKey.ID:X6}  {pk.EditorID,-34} \"{pk.Name}\"");
+                }
+                return;
+            }
+
+            // Who actually tests this record? Answers "is the player really put in
+            // this faction / is this global really the rank ladder" by finding the
+            // vanilla conditions that read it, and on whom they run.
+            //   dotnet run -- usage <formid-hex>
+            if (args.Length > 1 && args[0] == "usage")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                uint id = Convert.ToUInt32(args[1], 16);
+                var target = new FormKey(new ModKey("Skyrim", ModType.Master), id);
+
+                // Condition data holds its target behind a couple of wrapper shapes
+                // (ConditionParameter -> Link -> FormKeyNullable) that differ per
+                // condition type, so walk the properties and pull out any FormKey.
+                static IEnumerable<FormKey> Keys(object? o, int depth)
+                {
+                    if (o == null || depth > 3) yield break;
+                    var t = o.GetType();
+                    foreach (var pi in t.GetProperties())
+                    {
+                        if (pi.GetIndexParameters().Length > 0) continue;
+                        object? v;
+                        try { v = pi.GetValue(o); } catch { continue; }
+                        if (v == null) continue;
+                        if (v is FormKey fk) { yield return fk; continue; }
+                        if (pi.PropertyType == typeof(FormKey?)) { yield return (FormKey)v; continue; }
+                        var ns = v.GetType().Namespace ?? "";
+                        if (!ns.StartsWith("Mutagen")) continue;
+                        foreach (var k in Keys(v, depth + 1)) yield return k;
+                    }
+                }
+
+                bool Refers(IConditionGetter c)
+                {
+                    foreach (var k in Keys(c.Data, 0))
+                        if (k == target) return true;
+                    return false;
+                }
+
+                int hits = 0;
+                var byRunOn = new Dictionary<string, int>();
+                foreach (var d in esm.DialogTopics)
+                    foreach (var r in d.Responses)
+                        foreach (var c in r.Conditions)
+                        {
+                            if (!Refers(c)) continue;
+                            hits++;
+                            string fn = c.Data.GetType().Name.Replace("ConditionData", "");
+                            string runOn = c.Data.RunOnType.ToString();
+                            string k = $"{fn} / RunOn={runOn} / {c.CompareOperator}";
+                            byRunOn[k] = byRunOn.TryGetValue(k, out var n) ? n + 1 : 1;
+                            if (hits <= 12)
+                                Console.WriteLine($"  DIAL {d.FormKey.ID:X6} {d.EditorID,-34} INFO {r.FormKey.ID:X6}  {fn} RunOn={runOn} {c.CompareOperator}");
+                        }
+
+                Console.WriteLine();
+                Console.WriteLine($"=== {id:X6} 를 읽는 바닐라 대화 조건: {hits}건 ===");
+                foreach (var kv in byRunOn.OrderByDescending(x => x.Value))
+                    Console.WriteLine($"  {kv.Value,5}x  {kv.Key}");
+                if (hits == 0)
+                    Console.WriteLine("  (대화 조건에서 쓰이지 않음 - 스크립트로만 다뤄질 수 있다)");
+                return;
+            }
+
+            // Print a quest's stages, log entries and objectives, so "which stage
+            // actually means the player joined the Circle" is read off the record
+            // instead of recalled.
+            //   dotnet run -- quest <formid-hex>
+            if (args.Length > 1 && args[0] == "quest")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                uint qid = Convert.ToUInt32(args[1], 16);
+                var q = esm.Quests.FirstOrDefault(x => x.FormKey.ID == qid);
+                if (q == null) { Console.WriteLine($"QUST {qid:X6} 없음"); return; }
+
+                Console.WriteLine($"QUST {q.FormKey.ID:X6}  {q.EditorID}  \"{q.Name}\"");
+                Console.WriteLine($"  flags={q.Flags} type={q.Type} priority={q.Priority}");
+
+                Console.WriteLine("  --- 붙은 스크립트 ---");
+                foreach (var sc in q.VirtualMachineAdapter?.Scripts ?? new List<IScriptEntryGetter>())
+                {
+                    Console.WriteLine($"    script {sc.Name} props={sc.Properties.Count}");
+                    foreach (var pr in sc.Properties)
+                        Console.WriteLine($"        {pr.Name} ({pr.GetType().Name.Replace("ScriptProperty", "")})");
+                }
+
+                Console.WriteLine("  --- 목표(Objectives) ---");
+                foreach (var o in q.Objectives)
+                    Console.WriteLine($"    obj {o.Index,-4} \"{o.DisplayText}\"");
+
+                Console.WriteLine("  --- 단계(Stages) ---");
+                foreach (var st in q.Stages.OrderBy(x => x.Index))
+                {
+                    string flags = st.Flags.ToString();
+                    foreach (var le in st.LogEntries)
+                    {
+                        var txt = le.Entry?.String ?? "";
+                        Console.WriteLine($"    stage {st.Index,-4} [{flags}] \"{txt}\"");
+                    }
+                    if (st.LogEntries.Count == 0)
+                        Console.WriteLine($"    stage {st.Index,-4} [{flags}]");
+                }
+                return;
+            }
+
+            // Which quest carries a given script? Needed before you can cast a Quest
+            // to a vanilla script type and read its properties.
+            //   dotnet run -- script <ScriptName>
+            if (args.Length > 1 && args[0] == "script")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                string want = args[1];
+                foreach (var q in esm.Quests)
+                {
+                    var scripts = q.VirtualMachineAdapter?.Scripts;
+                    if (scripts == null) continue;
+                    foreach (var sc in scripts)
+                    {
+                        if (!string.Equals(sc.Name, want, StringComparison.OrdinalIgnoreCase)) continue;
+                        Console.WriteLine($"  QUST {q.FormKey.ID:X6}  {q.EditorID,-24} \"{q.Name}\"  props={sc.Properties.Count}");
+                    }
+                }
+                return;
+            }
+
+            // Dump every condition on one dialogue INFO. Used to read vanilla's own
+            // test for a piece of player state off the record rather than guessing it.
+            //   dotnet run -- info <formid-hex>
+            if (args.Length > 1 && args[0] == "info")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+
+                uint iid = Convert.ToUInt32(args[1], 16);
+                foreach (var d in esm.DialogTopics)
+                    foreach (var r in d.Responses)
+                    {
+                        if (r.FormKey.ID != iid) continue;
+                        Console.WriteLine($"INFO {r.FormKey.ID:X6} in DIAL {d.FormKey.ID:X6} {d.EditorID}");
+                        foreach (var resp in r.Responses)
+                            Console.WriteLine($"  응답: \"{resp.Text}\"");
+                        foreach (var c in r.Conditions)
+                        {
+                            string fn = c.Data.GetType().Name.Replace("ConditionData", "");
+                            var links = new List<string>();
+                            foreach (var pi in c.Data.GetType().GetProperties())
+                            {
+                                if (pi.GetIndexParameters().Length > 0) continue;
+                                object? v = null;
+                                try { v = pi.GetValue(c.Data); } catch { }
+                                if (v == null) continue;
+                                var ns = v.GetType().Namespace ?? "";
+                                if (!ns.StartsWith("Mutagen")) continue;
+                                foreach (var pi2 in v.GetType().GetProperties())
+                                {
+                                    if (pi2.Name != "Link") continue;
+                                    var link = pi2.GetValue(v);
+                                    var fk = link?.GetType().GetProperty("FormKeyNullable")?.GetValue(link);
+                                    if (fk is FormKey k)
+                                        links.Add($"{pi.Name}={k.ID:X6}:{k.ModKey}");
+                                }
+                            }
+                            string extra = links.Count > 0 ? "  [" + string.Join(", ", links) + "]" : "";
+                            Console.WriteLine($"  cond {fn,-26} RunOn={c.Data.RunOnType,-12} {c.CompareOperator} {CondValue(c)}  flags={c.Flags}{extra}");
+                        }
+                        return;
+                    }
+                Console.WriteLine($"INFO {iid:X6} 없음");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "qflags")
             {
                 Console.WriteLine("=== Mutagen Quest.Flag 값 ===");
@@ -700,7 +968,7 @@ namespace EspGenerator
             const uint IdBankTopic    = 0x804;
             const uint IdBankBranch   = 0x805;
             const uint IdBankInfo     = 0x806;
-            const uint IdCreditLimit  = 0x807;
+            // 0x807 retired: the flat merchant credit ceiling, now one global per tier.
             const uint IdCreditTopic  = 0x808;
             const uint IdCreditBranch = 0x809;
             const uint IdCreditInfo   = 0x80A;
@@ -716,11 +984,14 @@ namespace EspGenerator
             const uint IdPrincipalBase = 0x870;  // the sum the overdue charge is figured on
             const uint IdCleanRepayBase = 0x880; // loans settled without ever falling due
             const uint IdAccruedDayBase = 0x890; // overdue days already charged
-            const uint IdLoanTier1    = 0x860;
-            const uint IdLoanTier2    = 0x861;
-            const uint IdLoanTier3    = 0x862;
             const uint IdLoanTermDays = 0x863;
             const uint IdOverduePct   = 0x864;
+            // Loan ceiling per standing tier, 1..5. Tiers 1-3 keep the ids the old
+            // main-quest tiers had; 4 and 5 take new ones, so nothing above moves.
+            uint[] loanLimitIds = { 0x860, 0x861, 0x862, 0x865, 0x866 };
+            const uint IdCreditLimitBase = 0x8A0;  // merchant credit ceiling per tier
+            const uint IdCreditTierBase  = 0x8B0;  // per hold: highest tier recognised
+            const uint IdCreditPathBase  = 0x8C0;  // per hold: the deed that earned it
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
@@ -776,13 +1047,33 @@ namespace EspGenerator
                 accruedDays.Add(NewGlobal(IdAccruedDayBase + i, "BankLoanDaysCharged" + holds[i].name));
             }
 
-            var merchantCreditLimit = NewGlobal(IdCreditLimit, "MerchantCreditLimit", 1000f);
+            // No lender fronts gold to an unproven sellsword. What the Jarl's vault will
+            // advance, and what a general goods merchant will carry on the slate, both
+            // follow the standing tier the Dovahkiin has earned by deed. The ladder is
+            // the one the view publishes on its 신용등급 tab; these globals are where the
+            // numbers actually live, so tuning them moves both the rule and the display.
+            float[] loanLimitValues   = { 0f, 0f, 5000f, 12000f, 25000f };
+            float[] creditLimitValues = { 1000f, 1500f, 2000f, 3500f, 6000f };
 
-            // No lender fronts gold to an unproven sellsword. Standing is read off the main
-            // quest: nothing until the Greybeards acknowledge the player, then it climbs.
-            var loanTier1 = NewGlobal(IdLoanTier1, "BankLoanLimitTier1", 2500f);
-            var loanTier2 = NewGlobal(IdLoanTier2, "BankLoanLimitTier2", 6000f);
-            var loanTier3 = NewGlobal(IdLoanTier3, "BankLoanLimitTier3", 15000f);
+            var loanLimits = new List<GlobalFloat>();
+            var creditLimits = new List<GlobalFloat>();
+            for (int t = 0; t < 5; t++)
+            {
+                loanLimits.Add(NewGlobal(loanLimitIds[t], $"BankLoanLimitTier{t + 1}", loanLimitValues[t]));
+                creditLimits.Add(NewGlobal(IdCreditLimitBase + (uint)t, $"MerchantCreditLimitTier{t + 1}", creditLimitValues[t]));
+            }
+
+            // Standing is remembered per hold rather than recomputed, because the view
+            // presents it as a rank that is fixed on the day it is first recognised:
+            // the tier only ever climbs, and the title records which deed earned it.
+            var creditTiers = new List<GlobalFloat>();
+            var creditPaths = new List<GlobalFloat>();
+            for (uint i = 0; i < holds.Length; i++)
+            {
+                creditTiers.Add(NewGlobal(IdCreditTierBase + i, "BankCreditTier" + holds[i].name));
+                creditPaths.Add(NewGlobal(IdCreditPathBase + i, "BankCreditPath" + holds[i].name));
+            }
+
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
             // Charged per DAY overdue, on the original sum. A weekly charge left the
             // figure unchanged while letters arrived every morning, which read as broken;
@@ -921,20 +1212,44 @@ namespace EspGenerator
             ListProp("CleanRepayments", cleanRepayments);
             ListProp("AccruedDays", accruedDays);
             controller.Properties.Add(BookListProp("DunningLetters", letters));
+            ListProp("LoanLimits", loanLimits);
+            ListProp("CreditLimits", creditLimits);
+            ListProp("CreditTiers", creditTiers);
+            ListProp("CreditPaths", creditPaths);
+            // A scalar bound at the same moment as the four standing arrays, so Papyrus
+            // can test it instead of the arrays: an unbound array property throws when
+            // read and cannot be guarded with a None test.
+            ObjProp("CreditTierFlag", creditLimits[0].FormKey);
             ObjProp("HoldCrimeFactions", holdList.FormKey);
-            ObjProp("MerchantCreditLimit", merchantCreditLimit.FormKey);
             ObjProp("CreditSurcharge", surcharge.FormKey);
             ObjProp("DebugHotkey", debugHotkey.FormKey);
-            ObjProp("LoanTier1", loanTier1.FormKey);
-            ObjProp("LoanTier2", loanTier2.FormKey);
-            ObjProp("LoanTier3", loanTier3.FormKey);
             ObjProp("LoanTermDays", loanTermDays.FormKey);
             ObjProp("OverduePercent", overduePct.FormKey);
 
-            // Standing tiers, and the courier that carries the letters.
-            ObjProp("MQWayOfTheVoice", Vanilla(0x0242BA));   // MQ105 The Way of the Voice
-            ObjProp("MQBladeInTheDark", Vanilla(0x032926));  // MQ106 A Blade in the Dark
+            // ---- Standing: the records each tier is actually read from -----------------
+            // Every id below was read out of Skyrim.esm with the probes in this file, not
+            // recalled. The two that surprised us are worth keeping in view:
+            //
+            //  - There is no Thane faction, and the per-hold Favor25x quests stop once the
+            //    Jarl names you, which drops their stage data. Vanilla's own durable record
+            //    is FavorJarlsMakeFriends, whose script keeps <Hold>ImpGetOutofJail /
+            //    <Hold>SonsGetOutofJail per hold - 0 until you are Thane, then 1. It keys
+            //    off the Jarl's crime faction, the same handle this mod uses for holds.
+            //  - Civil War rank is not a faction rank; CWImperialFaction and CWSonsFaction
+            //    have no rank table. The global CWCountMissionsDone looks right but is
+            //    marked DEPRECATED/OBSOLETE in vanilla CWScript. The live value is
+            //    CWScript.PlayerRank on the CW quest, 1..4.
+            ObjProp("ThaneTracker", Vanilla(0x087E24));      // FavorJarlsMakeFriends
+            ObjProp("MQDragonRising", Vanilla(0x02610C));    // MQ104 Dragon Rising
             ObjProp("MQAlduinsBane", Vanilla(0x036193));     // MQ206 Alduin's Bane
+            ObjProp("MQDragonslayer", Vanilla(0x046EF3));    // MQ306, Alduin in Sovngarde
+            ObjProp("CompanionsJoin", Vanilla(0x04B2D9));    // C00 Take Up Arms
+            ObjProp("CompanionsCircleQuest", Vanilla(0x01CEF4));  // C03, stage 25 = the Circle
+            ObjProp("CompanionsHarbinger", Vanilla(0x1070DD));    // CompanionsHarbingerFaction
+            ObjProp("CollegeFaction", Vanilla(0x01F259));    // ranks 0..6, Wizard 4, Arch-Mage 6
+            ObjProp("CivilWar", Vanilla(0x019E53));          // CW, carries CWScript
+            ObjProp("CWImperial", Vanilla(0x02BF9A));
+            ObjProp("CWSons", Vanilla(0x02BF9B));
             ObjProp("Courier", Vanilla(0x039F82));           // WICourier
 
             ObjProp("Gold001", Gold001);

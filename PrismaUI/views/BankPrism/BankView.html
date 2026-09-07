@@ -171,6 +171,7 @@
     .action-btn.close-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
 
     .note { color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .note.overdue { color: var(--bad); }
 
     /* 대출탭 내역 박스 */
     .loan-log-section {
@@ -611,6 +612,13 @@
               <button class="action-btn" onclick="handleTransaction('deposit')">입금하기</button>
               <button class="action-btn" onclick="handleTransaction('withdraw')">출금하기</button>
             </div>
+
+            <div class="loan-log-section">
+              <div class="loan-log-title">예금 거래 기록</div>
+              <div class="ledger" id="depositLog">
+                <div class="ledger-empty">최근 입금/출금 거래가 없습니다.</div>
+              </div>
+            </div>
           </div>
 
           <!-- 대출 -->
@@ -644,7 +652,8 @@
               <button class="action-btn" onclick="sendAmountAction('repay')">상환하기</button>
             </div>
 
-            <!-- 대출 거래 기록 섹션 (도바킨 행적 문구 제거 후 추가) -->
+            <div class="note" id="loanNote"></div>
+
             <div class="loan-log-section">
               <div class="loan-log-title">대출 거래 기록</div>
               <div class="ledger" id="loanLog">
@@ -660,6 +669,10 @@
                 <div class="label">외상금</div>
                 <div class="value negative" id="valCreditDebt">0 G</div>
               </div>
+              <div class="figure">
+                <div class="label">외상 한도</div>
+                <div class="value" id="valCreditLimit">0 G</div>
+              </div>
             </div>
             <div class="note">
               외상은 이 홀드의 잡화상에게 직접 청해야 합니다.<br>
@@ -669,6 +682,13 @@
             <div class="btn-row" style="margin-top: 14px;">
               <button class="action-btn" onclick="sendAction('payCredit')">외상값 상환</button>
               <button class="action-btn" onclick="sendAction('sellBond')">채권 매각</button>
+            </div>
+
+            <div class="loan-log-section">
+              <div class="loan-log-title">외상 상환 기록</div>
+              <div class="ledger" id="creditLog">
+                <div class="ledger-empty">최근 외상 상환 거래가 없습니다.</div>
+              </div>
             </div>
           </div>
 
@@ -832,14 +852,14 @@
 
         <!-- 2. 확장칸 상단: 홀드별 문양 -->
         <div class="emblem-card">
-          <img id="holdEmblemImg" class="emblem-img" src="emblems/화이트런.png" alt="홀드 문양">
+          <img id="holdEmblemImg" class="emblem-img" src="emblems/whiterun.png" alt="홀드 문양">
           <div id="holdEmblemName" class="emblem-name">화이트런</div>
         </div>
 
         <!-- 3 & 4. 확장칸 하단: 청지기 초상화(대출/신용등급 탭) / 공간 확보 슬롯(예금·외상 탭) -->
         <div class="steward-card">
           <div class="steward-header">
-            <span class="steward-title" id="stewardRoleTitle">화이트런 행정관</span>
+            <span class="steward-title" id="stewardRoleTitle">화이트런 궁정</span>
             <span class="steward-grade-badge" id="stewardBadge">정체모를 용병</span>
           </div>
 
@@ -848,7 +868,7 @@
             <!-- 3. 대출/신용등급 탭 전용: 신용등급 5단계 프로벤투스 초상화 및 한줄 대사 -->
             <div class="portrait-view" id="right-loan">
               <div class="portrait-img-wrap">
-                <img id="portraitImg" class="portrait-img" src="portraits/프로벤투스 정체모를 용병.jpg" alt="청지기 초상화">
+                <img id="portraitImg" class="portrait-img" src="portraits/whiterun-t2.jpg" alt="청지기 초상화">
               </div>
               <div class="portrait-info">
                 <div class="portrait-dialogue" id="portraitQuote">"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."</div>
@@ -890,9 +910,15 @@
 </div>
 
 <script>
-  var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0, loanLimit: 0, loanDaysLeft: 0, overdueDays: 0, hold: '화이트런', grade: '보통' };
+  var state = {
+    wallet: 0, balance: 0, debt: 0, creditDebt: 0,
+    loanLimit: 0, creditLimit: 0, loanDaysLeft: 0, overdueDays: 0,
+    hold: '화이트런', holdKey: 'whiterun', grade: '정체모를 용병', tier: 2
+  };
   var amount = 0;
   var loanEntries = [];
+  var depositEntries = [];
+  var creditEntries = [];
   var currentTab = 'deposit';
 
   function comma(n) {
@@ -993,27 +1019,49 @@
   }
 
   var LABELS = { deposit: '입금', withdraw: '출금', payCredit: '외상 상환', borrow: '대출 실행', repay: '대출 상환' };
+  // Whether the transaction put gold in the player's hand. Drives the sign and colour,
+  // which is the only thing that differs between the three books.
   var INFLOW = { deposit: false, withdraw: true, payCredit: false, borrow: true, repay: false };
 
-  // Loan transactions are shown inside the Loan Panel
-  function addLoanEntry(type, value, debtAfter) {
-    loanEntries.unshift({ type: type, value: value, after: debtAfter });
-    if (loanEntries.length > 8) { loanEntries.pop(); }
+  // One entry writer for all three tabs. Each keeps its own list and its own running
+  // figure, so "예금 12,000 G" under a deposit line and "대출 잔액 1,200 G" under a
+  // repayment line are both read off the value that line actually moved.
+  function addEntry(logId, entries, type, value, after, afterLabel) {
+    entries.unshift({ type: type, value: value, after: after });
+    if (entries.length > 8) { entries.pop(); }
 
-    var log = document.getElementById('loanLog');
-    if (!log) return;
+    var log = document.getElementById(logId);
+    if (!log) { return; }
     log.innerHTML = '';
-    for (var i = 0; i < loanEntries.length; i++) {
-      var e = loanEntries[i];
-      var isBorrow = (e.type === 'borrow');
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var gain = INFLOW[e.type];
       var row = document.createElement('div');
       row.className = 'ledger-row';
       row.innerHTML =
         '<span class="ledger-kind">' + (LABELS[e.type] || e.type) + '</span>' +
-        '<span><span class="ledger-amount ' + (isBorrow ? 'out' : 'in') + '">' +
-        (isBorrow ? '+' : '-') + comma(e.value) + ' G</span>' +
-        '<span class="ledger-after">잔액 ' + comma(e.after) + ' G</span></span>';
+        '<span><span class="ledger-amount ' + (gain ? 'in' : 'out') + '">' +
+        (gain ? '+' : '-') + comma(e.value) + ' G</span>' +
+        '<span class="ledger-after">' + afterLabel + ' ' + comma(e.after) + ' G</span></span>';
       log.appendChild(row);
+    }
+  }
+
+  // The loan tab is where a player watches an overdue debt grow, so the warning that
+  // it is growing belongs here rather than in a tab that no longer exists.
+  function updateLoanNote() {
+    var el = document.getElementById('loanNote');
+    if (!el) { return; }
+    if (state.overdueDays > 0) {
+      el.innerText = '기한이 ' + state.overdueDays + '일 지났습니다. 하루가 지날 때마다 장부가 '
+        + '불어나고, 청지기가 사람을 보냅니다.';
+      el.className = 'note overdue';
+    } else if (state.loanLimit <= 0) {
+      el.innerText = '야를의 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.';
+      el.className = 'note';
+    } else {
+      el.innerText = '야를의 호의에는 서명할 때 한 번 가산이 붙습니다. 기한을 넘기면 날마다 더해집니다.';
+      el.className = 'note';
     }
   }
 
@@ -1022,241 +1070,152 @@
     if (el) { el.innerText = text; }
   }
 
-  /* 2. 홀드별 문양 매핑 테이블 */
-  var EMBLEM_MAP = {
-    '화이트런': 'emblems/화이트런.png',
-    '솔리튜드': 'emblems/솔리튜드.png',
-    '하핀가르': 'emblems/솔리튜드.png',
-    '윈드헬름': 'emblems/윈드헬름.png',
-    '이스트마치': 'emblems/윈드헬름.png',
-    '리프튼': 'emblems/리프튼.png',
-    '더 리프트': 'emblems/리프튼.png',
-    '마르카스': 'emblems/마르카스.png',
-    '더 리치': 'emblems/마르카스.png',
-    '윈터홀드': 'emblems/윈터홀드.png',
-    '던스타': 'emblems/던스타.png',
-    '페일': 'emblems/던스타.png',
-    '모탈': 'emblems/모탈.png',
-    '흐얄마치': 'emblems/모탈.png',
-    '팔크리스': 'emblems/팔크리스.png',
-    '포크리스': 'emblems/팔크리스.png'
-  };
+  /* Art is addressed by the hold's ASCII key, never by its Korean name: the game
+     already sends holdKey for exactly this reason, and a non-ASCII filename in a
+     URL is the one thing the view has no way to debug from inside the game. */
+  var HOLD_KEYS = ['whiterun', 'haafingar', 'eastmarch', 'rift', 'reach',
+                   'falkreath', 'hjaalmarch', 'pale', 'winterhold'];
 
-  /* 3. 3~5단계 최초 달성 경로별 세부 신용등급명, 초상화, 프로벤투스 전용 대사 */
+  /* Stewards whose portraits have been drawn. Any other hold borrows Whiterun's
+     art and is addressed by office rather than by name. */
+  var STEWARDS = { whiterun: '프로벤투스 아베니치' };
+
+  /* Keyed by the grade string the game sends. GetCreditGrade() in
+     BankPrismController.psc returns exactly these, one per unlock path, and the
+     game also sends the tier, so nothing here has to infer it. */
   var GRADE_DATA = {
-    // 1단계
     '외지인': {
-      tier: 1,
-      tierName: '1단계',
-      portrait: 'portraits/프로벤투스 외지인.jpg',
+      pathKey: '',
       quote: '"신원도 불확실한 외지인에게 내줄 금화는 없네. 장난칠 생각 말고 당장 물러서게."',
-      classType: 'bad',
-      loan: '불가', credit: '1,000 G'
+      classType: 'bad'
     },
-    // 2단계
     '정체모를 용병': {
-      tier: 2,
-      tierName: '2단계',
-      portrait: 'portraits/프로벤투스 정체모를 용병.jpg',
+      pathKey: '',
       quote: '"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."',
-      classType: 'mid',
-      loan: '불가', credit: '1,500 G'
+      classType: 'mid'
     },
-
-    // 3단계 A: 영지 평판
     '영지의 종사': {
-      tier: 3,
-      tierName: '3단계',
       pathKey: 'path-3-thane',
-      portrait: 'portraits/프로벤투스 영지의 친구.jpg',
       quote: '"아, 우리 영지의 정식 종사(Thane)이신 분이군요. 야를의 특별 보증 범위 안에서 정중히 모시겠습니다."',
-      classType: 'good',
-      loan: '5,000 G', credit: '2,000 G'
+      classType: 'good'
     },
-    // 3단계 B: 잡다한 의뢰
     '신뢰받는 해결사': {
-      tier: 3,
-      tierName: '3단계',
       pathKey: 'path-3-misc',
-      portrait: 'portraits/프로벤투스 영지의 친구.jpg',
       quote: '"영지 곳곳의 궂은일을 도맡아 해결해 주셨다고 들었네. 그 정직한 노동의 가치를 믿고 한도를 내어주지."',
-      classType: 'good',
-      loan: '5,000 G', credit: '2,000 G'
+      classType: 'good'
     },
-
-    // 4단계 A: 메인 퀘스트
     '스카이림의 영웅': {
-      tier: 4,
-      tierName: '4단계',
       pathKey: 'path-4-mq',
-      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
       quote: '"스카이림의 영웅을 맞이하게 되어 영광입니다. 야를의 뜻에 따라 원하시는 자금을 즉시 마련해 드리지요."',
-      classType: 'good',
-      loan: '12,000 G', credit: '3,500 G'
+      classType: 'good'
     },
-    // 4단계 B: 컴패니언
     '요르바스크의 전사': {
-      tier: 4,
-      tierName: '4단계',
       pathKey: 'path-4-comp',
-      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
       quote: '"요르바스크의 명예로운 동료이자 용맹한 전사여. 그 강인한 기백은 영지 금고보다도 든든한 신용 보증서라네."',
-      classType: 'good',
-      loan: '12,000 G', credit: '3,500 G'
+      classType: 'good'
     },
-    // 4단계 C: 마법대학
     '수석 마법학자': {
-      tier: 4,
-      tierName: '4단계',
       pathKey: 'path-4-mage',
-      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
       quote: '"윈터홀드 대학의 고위 마법사이시군요. 학파의 지성과 영광에 걸맞은 금융 편의를 제공해 드리겠습니다."',
-      classType: 'good',
-      loan: '12,000 G', credit: '3,500 G'
+      classType: 'good'
     },
-    // 4단계 D: 내전 군단
     '훈장 수훈 장교': {
-      tier: 4,
-      tierName: '4단계',
       pathKey: 'path-4-cw',
-      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
       quote: '"치열한 전선에서 군공을 세우신 사령관님을 맞이합니다. 군부의 신용을 보증 삼아 최우대 조치를 취하겠습니다."',
-      classType: 'good',
-      loan: '12,000 G', credit: '3,500 G'
+      classType: 'good'
     },
-
-    // 5단계 A: 메인 퀘스트
     '탐리엘의 구원자': {
-      tier: 5,
-      tierName: '5단계',
       pathKey: 'path-5-mq',
-      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
       quote: '"오, 탐리엘의 구원자이시여! 영지의 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."',
-      classType: 'good',
-      loan: '25,000 G', credit: '6,000 G'
+      classType: 'good'
     },
-    // 5단계 B: 컴패니언
     '컴패니언의 인도자': {
-      tier: 5,
-      tierName: '5단계',
       pathKey: 'path-5-comp',
-      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
       quote: '"이스그라모르의 의지를 잇는 인도자(Harbinger)시여. 요르바스크의 무한한 명예를 걸고, 최고의 한도를 보장합니다."',
-      classType: 'good',
-      loan: '25,000 G', credit: '6,000 G'
+      classType: 'good'
     },
-    // 5단계 C: 마법대학
     '대학의 아크메이지': {
-      tier: 5,
-      tierName: '5단계',
       pathKey: 'path-5-mage',
-      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
       quote: '"마법의 정점에 서신 아크메이지를 뵙습니다. 영지의 영예이신 당신께 금고의 모든 신용 편의를 개방합니다."',
-      classType: 'good',
-      loan: '25,000 G', credit: '6,000 G'
+      classType: 'good'
     },
-    // 5단계 D: 내전 군단
     '전쟁 영웅 장군': {
-      tier: 5,
-      tierName: '5단계',
       pathKey: 'path-5-cw',
-      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
       quote: '"스카이림에 승리를 가져다준 최고 총사령관 각하! 군의 절대적인 신용 보증서가 발행되었으니 마음껏 융통하십시오."',
-      classType: 'good',
-      loan: '25,000 G', credit: '6,000 G'
+      classType: 'good'
     }
   };
 
-  // 기존 바닐라/파피루스 6단계 호환 정규화
-  function resolveGradeData(rawGrade) {
-    if (!rawGrade) return GRADE_DATA['정체모를 용병'];
-    if (GRADE_DATA[rawGrade]) return GRADE_DATA[rawGrade];
-    // 레거시 명칭 맵
-    if (rawGrade === '신뢰') return GRADE_DATA['탐리엘의 구원자'];
-    if (rawGrade === '우량') return GRADE_DATA['스카이림의 영웅'];
-    if (rawGrade === '양호' || rawGrade === '종사') return GRADE_DATA['영지의 종사'];
-    if (rawGrade === '보통') return GRADE_DATA['정체모를 용병'];
-    if (rawGrade === '주의' || rawGrade === '불량') return GRADE_DATA['외지인'];
-    return GRADE_DATA['정체모를 용병'];
+  function gradeInfo(name) {
+    return GRADE_DATA[name] || GRADE_DATA['정체모를 용병'];
   }
 
-  function updateHoldEmblem(holdName) {
+  function updateHold(holdName, holdKey) {
+    if (HOLD_KEYS.indexOf(holdKey) < 0) { holdKey = 'whiterun'; }
+    state.holdKey = holdKey;
+
+    setText('holdName', holdName);
+    setText('holdEmblemName', holdName);
+    setText('stewardRoleTitle', holdName + ' 궁정');
+
     var imgEl = document.getElementById('holdEmblemImg');
-    var nameEl = document.getElementById('holdEmblemName');
-    var roleEl = document.getElementById('stewardRoleTitle');
+    if (imgEl) { imgEl.src = 'emblems/' + holdKey + '.png'; }
 
-    if (nameEl) nameEl.innerText = holdName;
-    if (roleEl) roleEl.innerText = holdName + ' 행정관';
-
-    var emblemFile = 'emblems/화이트런.png';
-    for (var key in EMBLEM_MAP) {
-      if (holdName && holdName.indexOf(key) !== -1) {
-        emblemFile = EMBLEM_MAP[key];
-        break;
-      }
-    }
-    if (imgEl) imgEl.src = emblemFile;
+    setText('portraitSpeaker', STEWARDS[holdKey] || (holdName + ' 청지기'));
   }
 
-  function updateStewardPortrait(gradeName) {
-    var info = resolveGradeData(gradeName);
-    var normGrade = gradeName;
-    for (var key in GRADE_DATA) {
-      if (GRADE_DATA[key] === info) {
-        normGrade = key;
-        break;
-      }
-    }
+  /* Portraits are named <holdKey>-t<tier>.jpg. Only Whiterun's set is drawn so far;
+     onerror falls the rest back to it rather than leaving an empty frame, so adding
+     a hold later is a matter of dropping five files in and nothing else. */
+  function updateStewardPortrait(gradeName, tier) {
+    var info = gradeInfo(gradeName);
 
     var imgEl = document.getElementById('portraitImg');
-    var quoteEl = document.getElementById('portraitQuote');
+    if (imgEl) {
+      imgEl.onerror = function () {
+        this.onerror = null;
+        this.src = 'portraits/whiterun-t' + tier + '.jpg';
+      };
+      imgEl.src = 'portraits/' + state.holdKey + '-t' + tier + '.jpg';
+    }
+
+    setText('portraitQuote', info.quote);
+
     var badgeEl = document.getElementById('stewardBadge');
-    var gradeMeterEl = document.getElementById('valGrade');
-
-    if (imgEl) imgEl.src = info.portrait;
-    if (quoteEl) quoteEl.innerText = info.quote;
-
     if (badgeEl) {
-      badgeEl.innerText = normGrade;
-      badgeEl.style.color = (info.classType === 'good') ? 'var(--good)' : (info.classType === 'bad' ? 'var(--bad)' : 'var(--gold)');
+      badgeEl.innerText = gradeName;
+      badgeEl.style.color = (info.classType === 'good') ? 'var(--good)'
+        : (info.classType === 'bad' ? 'var(--bad)' : 'var(--gold)');
     }
 
+    var gradeMeterEl = document.getElementById('valGrade');
     if (gradeMeterEl) {
-      gradeMeterEl.innerText = normGrade;
-      gradeMeterEl.className = 'value ' + ((info.classType === 'good') ? 'grade-good' : (info.classType === 'bad' ? 'grade-bad' : 'grade-mid'));
+      gradeMeterEl.innerText = gradeName;
+      gradeMeterEl.className = 'value ' + ((info.classType === 'good') ? 'grade-good'
+        : (info.classType === 'bad' ? 'grade-bad' : 'grade-mid'));
     }
 
-    // 신용등급 심사 탭 상단 요약 갱신
-    setText('trackCurrentGradeName', normGrade);
-    setText('trackCurrentLoan', info.loan);
-    setText('trackCurrentCredit', info.credit);
+    setText('trackCurrentGradeName', gradeName);
 
-    // 동적 타이틀 갱신 (3~5단계 카드 헤더 타이틀에 현재 해금된 칭호명 반영)
-    if (info.tier === 3) setText('tier3Title', normGrade);
-    if (info.tier === 4) setText('tier4Title', normGrade);
-    if (info.tier === 5) setText('tier5Title', normGrade);
+    // The tier headings show the title actually earned, not the first of the branch.
+    if (tier >= 3 && tier <= 5) { setText('tier' + tier + 'Title', gradeName); }
 
-    // 5단계 카드 하이라이트 및 달성 상태 갱신
-    var curTier = info.tier;
-    var tiers = [1, 2, 3, 4, 5];
-
-    tiers.forEach(function(t) {
+    // The rank is fixed on the day it is granted and never falls, so everything
+    // below the current tier reads as done and everything above as outstanding.
+    var t;
+    for (t = 1; t <= 5; t++) {
       var card = document.getElementById('card-' + t + '단계');
-      var statusBadge = document.getElementById('status-' + t + '단계');
-
       if (card) {
-        if (t === curTier) {
-          card.classList.add('current');
-        } else {
-          card.classList.remove('current');
-        }
+        if (t === tier) { card.classList.add('current'); }
+        else { card.classList.remove('current'); }
       }
 
+      var statusBadge = document.getElementById('status-' + t + '단계');
       if (statusBadge) {
-        if (t === curTier) {
+        if (t === tier) {
           statusBadge.innerText = '현재 등급 (영구 고정)';
           statusBadge.className = 'grade-card-status achieved';
-        } else if (t < curTier) {
+        } else if (t < tier) {
           statusBadge.innerText = '달성 완료';
           statusBadge.className = 'grade-card-status achieved';
         } else {
@@ -1264,14 +1223,13 @@
           statusBadge.className = 'grade-card-status locked';
         }
       }
-    });
+    }
 
-    // 해당 해금 경로(Path) 하이라이트
     var allPaths = document.querySelectorAll('.path-row');
-    allPaths.forEach(function(p) { p.classList.remove('unlocked'); });
+    for (var i = 0; i < allPaths.length; i++) { allPaths[i].classList.remove('unlocked'); }
     if (info.pathKey) {
       var pEl = document.getElementById(info.pathKey);
-      if (pEl) pEl.classList.add('unlocked');
+      if (pEl) { pEl.classList.add('unlocked'); }
     }
   }
 
@@ -1279,13 +1237,11 @@
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
 
-      if (data.hold !== undefined) {
-        state.hold = data.hold;
-        setText('holdName', data.hold);
-        updateHoldEmblem(data.hold);
-      }
-      if (data.holdKey !== undefined) {
-        document.getElementById('art').style.backgroundImage = "url('bg/" + data.holdKey + ".jpg')";
+      if (data.holdKey !== undefined || data.hold !== undefined) {
+        state.hold = (data.hold !== undefined) ? data.hold : state.hold;
+        updateHold(state.hold, data.holdKey);
+        document.getElementById('art').style.backgroundImage =
+          "url('bg/" + state.holdKey + ".jpg')";
       }
 
       if (data.wallet !== undefined) {
@@ -1296,10 +1252,18 @@
       if (data.balance !== undefined) { state.balance = data.balance; setText('valBalance', comma(data.balance) + ' G'); }
       if (data.debt !== undefined) { state.debt = data.debt; setText('valDebt', comma(data.debt) + ' G'); }
       if (data.creditDebt !== undefined) { state.creditDebt = data.creditDebt; setText('valCreditDebt', comma(data.creditDebt) + ' G'); }
+
       if (data.loanLimit !== undefined) {
         state.loanLimit = data.loanLimit;
         setText('valLoanLimit', comma(data.loanLimit) + ' G');
+        setText('trackCurrentLoan', data.loanLimit > 0 ? (comma(data.loanLimit) + ' G') : '불가');
       }
+      if (data.creditLimit !== undefined) {
+        state.creditLimit = data.creditLimit;
+        setText('valCreditLimit', comma(data.creditLimit) + ' G');
+        setText('trackCurrentCredit', comma(data.creditLimit) + ' G');
+      }
+
       if (data.loanDaysLeft !== undefined) {
         state.loanDaysLeft = data.loanDaysLeft;
         var due;
@@ -1308,28 +1272,41 @@
         else { due = data.loanDaysLeft + '일 남음'; }
         setText('valLoanDue', due);
       }
+
+      if (data.overdueDays !== undefined) { state.overdueDays = data.overdueDays; }
+      updateLoanNote();
+
       if (data.grade !== undefined) {
         state.grade = data.grade;
-        updateStewardPortrait(data.grade);
+        state.tier = (data.tier !== undefined) ? data.tier : state.tier;
+        updateStewardPortrait(state.grade, state.tier);
       }
-      if (data.overdueDays !== undefined) { state.overdueDays = data.overdueDays; }
 
-      if (data.message !== undefined) { setStatus(data.message, false); }
-
+      // Each activity keeps its own book, so a figure is always explained by the
+      // lines directly beneath it rather than in a separate combined ledger.
       if (data.txType) {
         if (data.txType === 'borrow' || data.txType === 'repay') {
-          addLoanEntry(data.txType, data.txAmount || 0, state.debt);
+          addEntry('loanLog', loanEntries, data.txType, data.txAmount || 0, state.debt, '대출 잔액');
+        } else if (data.txType === 'payCredit') {
+          addEntry('creditLog', creditEntries, data.txType, data.txAmount || 0, state.creditDebt, '외상 잔액');
+        } else {
+          addEntry('depositLog', depositEntries, data.txType, data.txAmount || 0, state.balance, '예금');
         }
         setAmount(0);
       }
+
+      // Last, because setAmount() clears the status line: put this above the
+      // transaction block and the game's confirmation is wiped before it is read.
+      if (data.message !== undefined) { setStatus(data.message, false); }
     } catch (e) {
       setStatus('데이터를 읽지 못했습니다.', true);
     }
   };
 
-  // Initial call with defaults
-  updateHoldEmblem('화이트런');
-  updateStewardPortrait('정체모를 용병');
+  // Initial state, replaced by the game's first update.
+  updateHold('화이트런', 'whiterun');
+  updateStewardPortrait('정체모를 용병', 2);
+  updateLoanNote();
 </script>
 </body>
 </html>

@@ -15,3 +15,4 @@ SKSE_Source/extern/
 # Vanilla Papyrus source, extracted from the Creation Kit's Scripts.zip for
 # compilation only. Bethesda's, not ours to redistribute.
 Scripts/Import/
+Scripts/Vanilla/

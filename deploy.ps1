@@ -52,6 +52,25 @@ foreach ($rel in $files) {
     Write-Host "  $rel"
 }
 
+# The view folder is generated entirely from the repository, so anything in the
+# deployed copy that is no longer in the repository is left over from an earlier
+# build. Renamed art in particular would otherwise sit there forever - the Korean
+# emblem and portrait filenames survived their own rename this way.
+$deployedView = Join-Path $dest ('PrismaUI' + [IO.Path]::DirectorySeparatorChar + 'views' + [IO.Path]::DirectorySeparatorChar + 'BankPrism')
+if (Test-Path $deployedView) {
+    $keep = @{}
+    foreach ($f in Get-ChildItem -Path $viewRoot -File -Recurse) {
+        $keep[$f.FullName.Substring($viewRoot.Length + 1)] = $true
+    }
+    foreach ($f in Get-ChildItem -Path $deployedView -File -Recurse) {
+        $rel = $f.FullName.Substring($deployedView.Length + 1)
+        if (-not $keep.ContainsKey($rel)) {
+            Remove-Item -LiteralPath $f.FullName -Force
+            Write-Host "  removed stale (view): $rel"
+        }
+    }
+}
+
 $meta = Join-Path $dest 'meta.ini'
 if (-not (Test-Path $meta)) {
     @(

@@ -9,7 +9,6 @@ GlobalVariable[] Property BankDebts Auto
 GlobalVariable[] Property CreditDebts Auto
 FormList Property HoldCrimeFactions Auto
 
-GlobalVariable Property MerchantCreditLimit Auto
 
 ; --- loans ---------------------------------------------------------------
 GlobalVariable[] Property LoanDue Auto
@@ -18,15 +17,34 @@ GlobalVariable[] Property CleanRepayments Auto
 GlobalVariable[] Property AccruedDays Auto
 Book[] Property DunningLetters Auto
 
-GlobalVariable Property LoanTier1 Auto
-GlobalVariable Property LoanTier2 Auto
-GlobalVariable Property LoanTier3 Auto
 GlobalVariable Property LoanTermDays Auto
 GlobalVariable Property OverduePercent Auto
 
-Quest Property MQWayOfTheVoice Auto
-Quest Property MQBladeInTheDark Auto
+; --- standing ------------------------------------------------------------
+; The tier the Dovahkiin has earned, 1..5, and what it entitles them to. The two
+; limit tables are indexed by tier; the two per-hold tables remember the standing
+; each hold's court has already recognised, so it never falls back.
+GlobalVariable[] Property LoanLimits Auto
+GlobalVariable[] Property CreditLimits Auto
+GlobalVariable[] Property CreditTiers Auto
+GlobalVariable[] Property CreditPaths Auto
+
+; Bound at the same time as the four arrays above, so it can stand in for them as a
+; readiness flag: an unbound array property throws the moment it is read, and cannot
+; be guarded with a None test.
+GlobalVariable Property CreditTierFlag Auto
+
+Quest Property ThaneTracker Auto            ; FavorJarlsMakeFriends
+Quest Property MQDragonRising Auto
 Quest Property MQAlduinsBane Auto
+Quest Property MQDragonslayer Auto
+Quest Property CompanionsJoin Auto
+Quest Property CompanionsCircleQuest Auto
+Quest Property CivilWar Auto                ; carries CWScript
+Faction Property CompanionsHarbinger Auto
+Faction Property CollegeFaction Auto
+Faction Property CWImperial Auto
+Faction Property CWSons Auto
 
 WICourierScript Property Courier Auto
 GlobalVariable Property CreditSurcharge Auto
@@ -231,6 +249,8 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"debt\":" + debt \
         + ", \"creditDebt\":" + credit \
         + ", \"loanLimit\":" + GetLoanLimit() \
+        + ", \"creditLimit\":" + GetCreditLimit(CurrentHold) \
+        + ", \"tier\":" + GetCreditTier(CurrentHold) \
         + ", \"overdueDays\":" + GetOverdueDays(CurrentHold) \
         + ", \"grade\":\"" + GetCreditGrade(CurrentHold) + "\"" \
         + ", \"loanDaysLeft\":" + GetLoanDaysLeft() \
@@ -353,10 +373,7 @@ Function BeginCreditBarter(Actor akMerchant)
         Return
     EndIf
 
-    Int limit = 1000
-    If MerchantCreditLimit
-        limit = MerchantCreditLimit.GetValueInt()
-    EndIf
+    Int limit = GetCreditLimit(hold)
 
     Int headroom = limit - CreditDebts[hold].GetValueInt()
     If headroom <= 0
@@ -445,18 +462,15 @@ EndEvent
 ; No lender fronts gold to an unproven sellsword - the trade is too close to a
 ; mercenary's for anyone's comfort. Standing is read off the main quest: nothing at
 ; all until the Greybeards acknowledge the player, and it climbs from there.
+; What the Jarl's vault will advance, read off the standing tier rather than the
+; main quest: the court lends on the strength of what it recognises, and four
+; different lives - Dragonborn, Circle, College, war - can earn the same trust.
 Int Function GetLoanLimit()
-    Int limit = 0
-    If MQWayOfTheVoice && MQWayOfTheVoice.IsCompleted()
-        limit = GetGlobalInt(LoanTier1)
+    Int tier = GetCreditTier(CurrentHold)
+    If !StandingReady() || tier < 1 || tier > LoanLimits.Length
+        Return 0
     EndIf
-    If MQBladeInTheDark && MQBladeInTheDark.IsCompleted()
-        limit = GetGlobalInt(LoanTier2)
-    EndIf
-    If MQAlduinsBane && MQAlduinsBane.IsCompleted()
-        limit = GetGlobalInt(LoanTier3)
-    EndIf
-    Return limit
+    Return GetGlobalInt(LoanLimits[tier - 1])
 EndFunction
 
 Int Function GetLoanTermDays()
@@ -533,61 +547,238 @@ EndFunction
 ; Standing with the hold
 ; ---------------------------------------------------------------------------
 
-; A rough read of how this hold's court sees the player's money. Loans settled
-; before they ever came due count for the most; being overdue right now counts
-; hardest against.
-Int Function GetCreditScore(Int aiHold)
-    If !HoldIsValid(aiHold)
-        Return 0
+; Standing is a rank earned by deed, not a score that drifts with repayment
+; behaviour, and the court fixes it on the day it first recognises the player. So
+; the tier is stored per hold and only ever climbs, and alongside it the path -
+; which deed earned it - because that is what gives the rank its name.
+;
+; Every test below reads a vanilla record that was checked against Skyrim.esm; see
+; the standing block in EspGenerator/Program.cs for why these and not the obvious
+; ones (there is no Thane faction, and the Civil War mission counter is deprecated).
+;
+; Path codes are tier * 10 + the branch, in the order the view lists them.
+Int Function EarnedPath(Int aiHold)
+    If IsTier5MainQuest()
+        Return 50
+    ElseIf IsTier5Companions()
+        Return 51
+    ElseIf IsTier5College()
+        Return 52
+    ElseIf IsTier5CivilWar()
+        Return 53
+    ElseIf IsTier4MainQuest()
+        Return 40
+    ElseIf IsTier4Companions()
+        Return 41
+    ElseIf IsTier4College()
+        Return 42
+    ElseIf IsTier4CivilWar()
+        Return 43
+    ElseIf IsThaneOf(aiHold)
+        Return 30
+    ElseIf MiscObjectivesDone() >= 30
+        Return 31
+    ElseIf IsTier2()
+        Return 20
     EndIf
-
-    Int score = 2
-    Int clean = 0
-    If LoansReady()
-        clean = CleanRepayments[aiHold].GetValueInt()
-    EndIf
-
-    If clean >= 5
-        score += 2
-    ElseIf clean >= 1
-        score += 1
-    EndIf
-
-    Int balance = GetGlobalInt(BankBalances[aiHold])
-    If balance >= 5000
-        score += 2
-    ElseIf balance >= 1000
-        score += 1
-    EndIf
-
-    Int overdue = GetOverdueDays(aiHold)
-    If overdue > 0
-        score -= 2
-    EndIf
-    If overdue >= 7
-        score -= 2
-    EndIf
-    If GetGlobalInt(CreditDebts[aiHold]) > 0
-        score -= 1
-    EndIf
-
-    Return score
+    Return 10
 EndFunction
 
-String Function GetCreditGrade(Int aiHold)
-    Int score = GetCreditScore(aiHold)
-    If score >= 6
-        Return "신뢰"
-    ElseIf score >= 5
-        Return "우량"
-    ElseIf score >= 3
-        Return "양호"
-    ElseIf score >= 2
-        Return "보통"
-    ElseIf score >= 0
-        Return "주의"
+Bool Function IsTier5MainQuest()
+    Return MQDragonslayer != None && MQDragonslayer.IsCompleted()
+EndFunction
+
+Bool Function IsTier5Companions()
+    Return CompanionsHarbinger != None && Game.GetPlayer().IsInFaction(CompanionsHarbinger)
+EndFunction
+
+Bool Function IsTier5College()
+    Return CollegeRank() >= 6
+EndFunction
+
+Bool Function IsTier5CivilWar()
+    Return CivilWarRank() >= 4
+EndFunction
+
+Bool Function IsTier4MainQuest()
+    Return MQAlduinsBane != None && MQAlduinsBane.IsCompleted()
+EndFunction
+
+; C03 stage 25 is the line "I have ascended to the Circle which leads the
+; Companions" - the record's own words, not an inference from the quest order.
+Bool Function IsTier4Companions()
+    Return CompanionsCircleQuest != None && CompanionsCircleQuest.GetStageDone(25)
+EndFunction
+
+Bool Function IsTier4College()
+    Return CollegeRank() >= 4
+EndFunction
+
+Bool Function IsTier4CivilWar()
+    Return CivilWarRank() >= 2
+EndFunction
+
+Bool Function IsTier2()
+    If CollegeRank() >= 0
+        Return True
     EndIf
-    Return "불량"
+    If CompanionsJoin != None && CompanionsJoin.IsCompleted()
+        Return True
+    EndIf
+    If MiscObjectivesDone() >= 10
+        Return True
+    EndIf
+    If MQDragonRising != None && MQDragonRising.IsRunning()
+        Return True
+    EndIf
+    If MQDragonRising != None && MQDragonRising.IsCompleted()
+        Return True
+    EndIf
+    Actor player = Game.GetPlayer()
+    If CWImperial != None && player.IsInFaction(CWImperial)
+        Return True
+    EndIf
+    If CWSons != None && player.IsInFaction(CWSons)
+        Return True
+    EndIf
+    Return False
+EndFunction
+
+; -1 when the player is not enrolled at all; 0..6 Student..Arch-Mage otherwise.
+Int Function CollegeRank()
+    If CollegeFaction == None
+        Return -1
+    EndIf
+    Return Game.GetPlayer().GetFactionRank(CollegeFaction)
+EndFunction
+
+; 1..4 once the player has been promoted; 0 before that. Vanilla keeps this on the
+; CW quest's script, not in a faction rank table and not in CWCountMissionsDone,
+; which its own comment marks as deprecated.
+Int Function CivilWarRank()
+    If CivilWar == None
+        Return 0
+    EndIf
+    CWScript cw = CivilWar as CWScript
+    If cw == None
+        Return 0
+    EndIf
+    Return cw.PlayerRank
+EndFunction
+
+; Vanilla's own durable record of thanehood, per hold and per side of the war. The
+; Favor25x quests stop the moment the Jarl names you, taking their stage data with
+; them; these variables are set at the same moment and stay set.
+Bool Function IsThaneOf(Int aiHold)
+    If ThaneTracker == None
+        Return False
+    EndIf
+    FavorJarlsMakeFriendsScript thane = ThaneTracker as FavorJarlsMakeFriendsScript
+    If thane == None
+        Return False
+    EndIf
+
+    If aiHold == 0
+        Return thane.WhiterunImpGetOutofJail > 0 || thane.WhiterunSonsGetOutofJail > 0
+    ElseIf aiHold == 1
+        Return thane.HaafingarImpGetOutofJail > 0 || thane.HaafingarSonsGetOutofJail > 0
+    ElseIf aiHold == 2
+        Return thane.EastmarchImpGetOutofJail > 0 || thane.EastmarchSonsGetOutofJail > 0
+    ElseIf aiHold == 3
+        Return thane.RiftImpGetoutofJail > 0 || thane.RiftSonsGetOutofJail > 0
+    ElseIf aiHold == 4
+        Return thane.ReachImpGetOutofJail > 0 || thane.ReachSonsGetOutofJail > 0
+    ElseIf aiHold == 5
+        Return thane.FalkreathImpGetOutofJail > 0 || thane.FalkreathSonsGetOutofJail > 0
+    ElseIf aiHold == 6
+        Return thane.HjaalmarchImpGetOutofJail > 0 || thane.HjaalmarchSonsGetOutofJail > 0
+    ElseIf aiHold == 7
+        Return thane.PaleImpGetOutofJail > 0 || thane.PaleSonsGetOutofJail > 0
+    ElseIf aiHold == 8
+        Return thane.WinterholdImpGetOutofJail > 0 || thane.WinterholdSonsGetOutofJail > 0
+    EndIf
+    Return False
+EndFunction
+
+; The stat name is the one the game itself carries; it was read out of SkyrimSE.exe
+; rather than remembered, because QueryStat answers 0 for a name that does not exist
+; and would have failed silently.
+Int Function MiscObjectivesDone()
+    Return Game.QueryStat("Misc Objectives Completed")
+EndFunction
+
+Bool Function StandingReady()
+    Return CreditTierFlag != None
+EndFunction
+
+Int Function PathTier(Int aiPath)
+    Return aiPath / 10
+EndFunction
+
+; Reads the locked standing, promoting it first if the player has earned better.
+; Demotion never happens: the view calls the rank permanent, and it is.
+Int Function ResolveStanding(Int aiHold)
+    If !HoldIsValid(aiHold) || !StandingReady()
+        Return 10
+    EndIf
+
+    Int stored = CreditPaths[aiHold].GetValueInt()
+    If stored < 10
+        stored = 10
+    EndIf
+
+    Int earned = EarnedPath(aiHold)
+    If PathTier(earned) > PathTier(stored)
+        CreditPaths[aiHold].SetValue(earned as Float)
+        CreditTiers[aiHold].SetValue(PathTier(earned) as Float)
+        Return earned
+    EndIf
+
+    CreditTiers[aiHold].SetValue(PathTier(stored) as Float)
+    Return stored
+EndFunction
+
+Int Function GetCreditTier(Int aiHold)
+    Return PathTier(ResolveStanding(aiHold))
+EndFunction
+
+; The titles the view keys its portraits and steward lines off. Changing one here
+; means changing the matching key in GRADE_DATA in BankView.html.
+String Function GetCreditGrade(Int aiHold)
+    Int path = ResolveStanding(aiHold)
+    If path == 50
+        Return "탐리엘의 구원자"
+    ElseIf path == 51
+        Return "컴패니언의 인도자"
+    ElseIf path == 52
+        Return "대학의 아크메이지"
+    ElseIf path == 53
+        Return "전쟁 영웅 장군"
+    ElseIf path == 40
+        Return "스카이림의 영웅"
+    ElseIf path == 41
+        Return "요르바스크의 전사"
+    ElseIf path == 42
+        Return "수석 마법학자"
+    ElseIf path == 43
+        Return "훈장 수훈 장교"
+    ElseIf path == 30
+        Return "영지의 종사"
+    ElseIf path == 31
+        Return "신뢰받는 해결사"
+    ElseIf path == 20
+        Return "정체모를 용병"
+    EndIf
+    Return "외지인"
+EndFunction
+
+; What a general goods merchant in this hold will carry on the slate.
+Int Function GetCreditLimit(Int aiHold)
+    Int tier = GetCreditTier(aiHold)
+    If !StandingReady() || tier < 1 || tier > CreditLimits.Length
+        Return 1000
+    EndIf
+    Return GetGlobalInt(CreditLimits[tier - 1])
 EndFunction
 
 Bool Function IsOverdue(Int aiHold)

@@ -81,9 +81,14 @@ are easy to get wrong here and are deliberately handled in code:
 "C:\TAKEALOOK\mods\Creation Kit\Root\Papyrus Compiler\PapyrusCompiler.exe" ^
   "C:\TAKEALOOK\BankPrismUI\Scripts\Source" -all ^
   -f="C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts\TESV_Papyrus_Flags.flg" ^
-  -i="C:\TAKEALOOK\BankPrismUI\Scripts\Source;C:\TAKEALOOK\BankPrismUI\Scripts\Import;C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts;C:\TAKEALOOK\mods\Skyrim Script Extender (SKSE64)\Scripts\Source" ^
+  -i="C:\TAKEALOOK\BankPrismUI\Scripts\Source;C:\TAKEALOOK\BankPrismUI\Scripts\Import;C:\TAKEALOOK\mods\Skyrim Script Extender (SKSE64)\Scripts\Source;C:\TAKEALOOK\mods\Papyrus Compiler\source\scripts;C:\TAKEALOOK\BankPrismUI\Scripts\Vanilla" ^
   -o="C:\TAKEALOOK\BankPrismUI\Scripts"
 ```
+
+**The SKSE source folder must come before `Scripts\Vanilla`.** The Creation Kit's
+own copies of `Form.psc`, `Quest.psc` and friends have no SKSE additions, so if the
+vanilla tree is searched first the compiler stops recognising `RegisterForModEvent`,
+`RegisterForKey` and `RegisterForMenu`, and every script in this mod fails to build.
 
 Papyrus sources **must be saved as UTF-8 with a BOM**. The compiler reads a
 BOM-less UTF-8 file as the system ANSI codepage, which turns every Korean string
@@ -105,8 +110,19 @@ of the Creation Kit archive and it stays out of git:
 python -c "import zipfile,os; z=zipfile.ZipFile(r'C:\TAKEALOOK\mods\Creation Kit\Root\Data\Scripts.zip'); open(r'C:\TAKEALOOK\BankPrismUI\Scripts\Import\WICourierScript.psc','wb').write(z.read('Source/Scripts/WICourierScript.psc'))"
 ```
 
-Only `Scripts/Source` is compiled, so nothing in `Import` produces a .pex that
-could overwrite the game's own.
+`Scripts/Vanilla` is the whole vanilla source tree, needed because the standing
+system reads two vanilla quest scripts directly - `CWScript` for the player's Civil
+War rank and `FavorJarlsMakeFriendsScript` for thanehood. Referencing either type
+pulls in a dependency chain the partial extraction under `mods/Papyrus Compiler`
+cannot close, so extract all of it. It is also gitignored, and compiling against
+the full tree costs about a second:
+
+```
+python -c "import zipfile,os; z=zipfile.ZipFile(r'C:\TAKEALOOK\mods\Creation Kit\Root\Data\Scripts.zip'); d=r'C:\TAKEALOOK\BankPrismUI\Scripts\Vanilla'; os.makedirs(d,exist_ok=True); [open(os.path.join(d,n.split('/')[-1]),'wb').write(z.read(n)) for n in z.namelist() if n.lower().endswith('.psc')]"
+```
+
+Only `Scripts/Source` is compiled, so nothing in `Import` or `Vanilla` produces a
+.pex that could overwrite the game's own.
 
 ### 3. SKSE plugin (`BankPrismNative.dll`)
 
