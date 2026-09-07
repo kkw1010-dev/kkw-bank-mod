@@ -1044,11 +1044,34 @@ Function ScheduleDunningRun()
     RegisterForSingleUpdateGameTime(1.0)
 EndFunction
 
+; Seven letters per hold, one per day overdue, so the court's patience visibly
+; runs out instead of the same page arriving every morning. Past the seventh day
+; the last one repeats: what happens after that is a separate piece of work.
+Int Function DunningDays()
+    Return 7
+EndFunction
+
 Function SendDunningLetter(Int aiHold)
-    If Courier == None || !LoansReady() || aiHold >= DunningLetters.Length
+    If Courier == None || !LoansReady() || aiHold < 0
         Return
     EndIf
-    Courier.addItemToContainer(DunningLetters[aiHold], 1)
+
+    Int day = GetOverdueDays(aiHold)
+    If day < 1
+        day = 1
+    ElseIf day > DunningDays()
+        day = DunningDays()
+    EndIf
+
+    Int slot = aiHold * DunningDays() + (day - 1)
+    If slot < 0 || slot >= DunningLetters.Length
+        ; An older save still holds the one-letter-per-hold array. Nothing to send
+        ; that would not be the wrong letter, so say why rather than fail silently.
+        Trace("dunning: slot " + slot + " out of range (" + DunningLetters.Length             + ") - this save predates the per-day letters")
+        Return
+    EndIf
+
+    Courier.addItemToContainer(DunningLetters[slot], 1)
 EndFunction
 
 Event OnUpdateGameTime()

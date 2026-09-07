@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Linq;
 using System.Collections.Generic;
 using System.IO;
@@ -980,7 +981,8 @@ namespace EspGenerator
             const uint IdBankDebtBase = 0x820;
             const uint IdCreditBase   = 0x830;
             const uint IdLoanDueBase  = 0x840;   // game time the loan falls due, 0 = none
-            const uint IdLetterBase   = 0x850;   // one dunning letter per hold
+            // 0x850-0x858 retired: one letter per hold, from before they were per day.
+            const uint IdLetterBase   = 0x900;   // 9 holds x 7 days, 0x900-0x93E
             const uint IdPrincipalBase = 0x870;  // the sum the overdue charge is figured on
             const uint IdCleanRepayBase = 0x880; // loans settled without ever falling due
             const uint IdAccruedDayBase = 0x890; // overdue days already charged
@@ -1094,12 +1096,23 @@ namespace EspGenerator
             // over the civil war - Vignar Gray-Mane replaces Balgruuf if the Stormcloaks
             // take the hold - so this line goes stale in those saves. It is prose, and
             // swapping it is a text edit, which is the trade that was chosen here.
-            string DunningLetter(string koreanHold)
+            // ---- 독촉장 문안 ---------------------------------------------------
+            // 홀드 9곳 x 연체 1~7일차 = 63통. 문안을 채울 때 건드릴 곳은 아래 표뿐이고
+            // 나머지 코드는 손댈 필요가 없다. 빈 칸은 그 날짜의 공용 문안으로 떨어지므로,
+            // 채운 만큼만 반영되고 나머지는 그대로 돌아간다.
+            //
+            // 8일차부터는 별도 이벤트가 붙을 예정이라 7통에서 끊는다.
+            //
+            // 야를이나 행정관 이름을 문안에 쓸 때 주의: 내전으로 화이트런의 야를이,
+            // 리치/하얄마치/팔크리스의 행정관이 바뀐다. 그 세이브에서는 글이 어긋난다.
+            const int DunningDays = 7;
+
+            var dunning = new Dictionary<string, string[]>
             {
-                if (koreanHold == "화이트런")
+                ["화이트런"] = new string[DunningDays]
                 {
-                    return
-                        "위대한 발그루프의 행정관\n\n" +
+                    // 1일차 - 사용자 작성. 톤의 기준.
+"위대한 발그루프의 행정관\n\n" +
                         "뵐 수 있기를 기대했으나, 영지 밖에서 귀하의 위대한 대업에 대한 소문만 " +
                         "전해 들을 뿐이군요.\n\n" +
                         "지금 화이트런은 제국과 스톰클로크의 갈등 속에서 홀드를 지켜내기 위해 " +
@@ -1113,26 +1126,65 @@ namespace EspGenerator
                         "잃게 됩니다.\n\n" +
                         "부디 귀하의 명예와 우리 사이의 신뢰를 기억해 주십시오. 이 서신을 보거든 " +
                         "드래곤즈리치로 직접 저를 찾아와 야를의 호의에 대한 보답을 깨끗이 " +
-                        "매듭지어 주시길 부탁드립니다.";
-                }
+                        "매듭지어 주시길 부탁드립니다.",
+                    "", "", "", "", "", "",   // 2~7일차
+                },
+                ["하핑가"] = new string[DunningDays],
+                ["이스트마치"] = new string[DunningDays],
+                ["리프트"] = new string[DunningDays],
+                ["리치"] = new string[DunningDays],
+                ["팔크리스"] = new string[DunningDays],
+                ["하얄마치"] = new string[DunningDays],
+                ["페일"] = new string[DunningDays],
+                ["윈터홀드"] = new string[DunningDays],
+            };
+
+            // 아직 쓰이지 않은 칸을 메우는 공용 문안. 날짜가 갈수록 인내심이 줄어든다.
+            string GenericDunning(string koreanHold, int day)
+            {
+                string opening;
+                if (day <= 2)
+                    opening = "야를께서 호의로 내어주신 돈이 정해진 날을 넘겼습니다. 잊으신 " +
+                              "것이라 믿고, 우선 서신으로 알려 드립니다.";
+                else if (day <= 5)
+                    opening = "장부는 하루가 지날 때마다 불어나고 있습니다. 궁의 셈은 사람의 " +
+                              "사정을 헤아리지 않으니, 늦을수록 갚으실 몫만 커집니다.";
+                else
+                    opening = "여러 날 서신을 보냈으나 답이 없었습니다. 나는 기다리는 일에 " +
+                              "익숙하지 않고, 야를의 인내에도 끝이 있습니다.";
 
                 return
-                    koreanHold + " 야를궁의 장부에 귀하의 이름이 올라 있습니다.\n\n" +
-                    "야를께서 호의로 내어주신 돈은 정해진 날을 넘겼습니다. 장부는 하루가 지날 " +
-                    "때마다 불어나고 있으며, 나는 기다리는 일에 익숙하지 않습니다.\n\n" +
+                    koreanHold + " 야를궁의 장부에 귀하의 이름이 올라 있습니다. 연체 "
+                    + day + "일째입니다.\n\n" +
+                    opening + "\n\n" +
                     "야를의 호의를 배신하지 마십시오.\n\n" +
-                    "궁으로 찾아와 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
-                    "— " + koreanHold + " 야를의 행정관";
+                    "궁으로 찾아와 장부를 정리하십시오.\n\n" +
+                    "― " + koreanHold + " 야를의 행정관";
             }
 
+            string DunningLetter(string koreanHold, int day)
+            {
+                if (dunning.TryGetValue(koreanHold, out var written)
+                    && day >= 1 && day <= written.Length
+                    && !string.IsNullOrWhiteSpace(written[day - 1]))
+                {
+                    return written[day - 1];
+                }
+                return GenericDunning(koreanHold, day);
+            }
             // A letter per hold, handed to the vanilla courier when a loan falls overdue.
+            // Papyrus indexes this list as hold * DunningDays + (overdue day - 1), so the
+            // order here is part of the save format, the same way the hold order is.
             var letters = new List<Book>();
             for (uint i = 0; i < holds.Length; i++)
             {
                 var hold = holds[i];
-                var book = new Book(Id(IdLetterBase + i), SkyrimRelease.SkyrimSE)
+                for (int day = 1; day <= DunningDays; day++)
                 {
-                    EditorID = "BankPrismDunningLetter" + hold.name,
+                uint slot = i * (uint)DunningDays + (uint)(day - 1);
+                var book = new Book(Id(IdLetterBase + slot), SkyrimRelease.SkyrimSE)
+                {
+                    EditorID = "BankPrismDunningLetter" + hold.name + "Day" + day,
                     Name = hold.korean + " 채무 독촉장",
                     Weight = 0f,
                     Value = 0,
@@ -1143,12 +1195,13 @@ namespace EspGenerator
                     Model = new Model { File = "Clutter\\Books\\Note01.nif" },
                     // No leading [pagebreak]: it opened the note on a blank first page.
                     // One in the middle, because a note this long is cut off without it.
-                    BookText = DunningLetter(hold.korean)
+                    BookText = DunningLetter(hold.korean, day)
                 };
                 book.InventoryArt.SetTo(Vanilla(0x097788));  // the note's inventory static
                 book.PickUpSound.SetTo(Vanilla(0x0C7A54));   // ITMBookUp
                 mod.Books.Add(book);
                 letters.Add(book);
+                }
             }
 
             // Crime factions in hold order. Papyrus resolves the hold by asking the
@@ -1437,6 +1490,7 @@ namespace EspGenerator
             }
 
             AssertDialogueCanWork(check);
+            AssertFontCanDrawIt(outputPath);
         }
 
         // Everything here is a condition under which the game shows no topic at all,
@@ -1524,6 +1578,138 @@ namespace EspGenerator
             Console.WriteLine();
             Console.WriteLine("이 상태로 배포하면 대화문이 조용히 사라진다. 배포하지 말 것.");
             Environment.ExitCode = 1;
+        }
+
+        // Text the game draws itself - letters, notifications, dialogue prompts - goes
+        // through the Korean font this setup ships, which is a 2,350-syllable cut. A
+        // character outside it is drawn as a question mark, with no error anywhere: the
+        // Hjaalmarch letter arrived as "?마치" for days before anyone worked out why.
+        // Reading the font's own cmap and checking every string we write is the only
+        // place that can be caught without launching the game.
+        static void AssertFontCanDrawIt(string espPath)
+        {
+            const string fontPath =
+                @"C:\TAKEALOOK\mods\TAKEALOOK - Font Edit\backup\DNF - Optimised.ttf";
+            if (!File.Exists(fontPath))
+            {
+                Console.WriteLine();
+                Console.WriteLine("--- 폰트 검사: 건너뜀 (폰트를 찾지 못함) ---");
+                return;
+            }
+
+            var glyphs = ReadCmap(fontPath);
+            if (glyphs.Count == 0)
+            {
+                Console.WriteLine("--- 폰트 검사: 건너뜀 (cmap을 읽지 못함) ---");
+                return;
+            }
+
+            // Only the text subrecords: decoding the whole file turns record bytes into
+            // stray characters that look like real misses.
+            var missing = new SortedDictionary<int, string>();
+            foreach (var (edid, field, text) in ReadStrings(espPath))
+            {
+                foreach (var ch in text)
+                {
+                    if (ch < 0x80) continue;
+                    if (glyphs.Contains(ch)) continue;
+                    if (!missing.ContainsKey(ch)) missing[ch] = $"{edid} / {field}";
+                }
+            }
+
+            Console.WriteLine();
+            if (missing.Count == 0)
+            {
+                Console.WriteLine("--- 폰트 검사: 통과 (게임이 그릴 수 없는 글자 없음) ---");
+                return;
+            }
+
+            Console.WriteLine("--- 폰트 검사: 실패 ---");
+            foreach (var kv in missing)
+                Console.WriteLine($"  U+{kv.Key:X4} 를 게임 폰트가 그리지 못한다  (처음 나온 곳: {kv.Value})");
+            Console.WriteLine();
+            Console.WriteLine("게임에서 물음표로 나온다. 흔한 글자로 바꿀 것.");
+            Environment.ExitCode = 1;
+        }
+
+        // EDID / field name / text, for every string subrecord in the plugin.
+        static IEnumerable<(string edid, string field, string text)> ReadStrings(string path)
+        {
+            var data = File.ReadAllBytes(path);
+            int off = 0;
+            string edid = "";
+            while (off < data.Length - 24)
+            {
+                var type = Encoding.ASCII.GetString(data, off, 4);
+                int size = BitConverter.ToInt32(data, off + 4);
+                if (type == "GRUP") { off += 24; continue; }
+
+                int p = off + 24, end = off + 24 + size;
+                while (p < end - 6)
+                {
+                    var sub = Encoding.ASCII.GetString(data, p, 4);
+                    int len = BitConverter.ToUInt16(data, p + 4);
+                    if (sub == "EDID" || sub == "FULL" || sub == "DESC" || sub == "CNAM")
+                    {
+                        var raw = new byte[len];
+                        Array.Copy(data, p + 6, raw, 0, len);
+                        var txt = Encoding.UTF8.GetString(raw).TrimEnd(' ');
+                        if (sub == "EDID") edid = txt;
+                        else yield return (edid, sub, txt);
+                    }
+                    p += 6 + len;
+                }
+                off = end;
+            }
+        }
+
+        // Format 4 cmap, which is what these fonts use.
+        static HashSet<int> ReadCmap(string path)
+        {
+            var chars = new HashSet<int>();
+            var d = File.ReadAllBytes(path);
+            int Be16(int o) => (d[o] << 8) | d[o + 1];
+            int Be32(int o) => (d[o] << 24) | (d[o + 1] << 16) | (d[o + 2] << 8) | d[o + 3];
+
+            int numTables = Be16(4), cmap = -1;
+            for (int i = 0; i < numTables; i++)
+            {
+                int rec = 12 + 16 * i;
+                if (Encoding.ASCII.GetString(d, rec, 4) == "cmap") cmap = Be32(rec + 8);
+            }
+            if (cmap < 0) return chars;
+
+            int n = Be16(cmap + 2), best = -1;
+            for (int i = 0; i < n; i++)
+            {
+                int pid = Be16(cmap + 4 + 8 * i), eid = Be16(cmap + 6 + 8 * i);
+                if ((pid == 3 && (eid == 1 || eid == 10)) || (pid == 0)) best = cmap + Be32(cmap + 8 + 8 * i);
+            }
+            if (best < 0 || Be16(best) != 4) return chars;
+
+            int segX2 = Be16(best + 6), seg = segX2 / 2;
+            int endo = best + 14, starto = endo + segX2 + 2, deltao = starto + segX2, rangeo = deltao + segX2;
+            for (int s = 0; s < seg; s++)
+            {
+                int e = Be16(endo + 2 * s), st = Be16(starto + 2 * s);
+                short delta = (short)Be16(deltao + 2 * s);
+                int ro = Be16(rangeo + 2 * s);
+                if (st == 0xFFFF) continue;
+                for (int c = st; c <= Math.Min(e, 0xFFFE); c++)
+                {
+                    int g;
+                    if (ro == 0) g = (c + delta) & 0xFFFF;
+                    else
+                    {
+                        int gi = rangeo + 2 * s + ro + 2 * (c - st);
+                        if (gi + 1 >= d.Length) continue;
+                        g = Be16(gi);
+                        if (g != 0) g = (g + delta) & 0xFFFF;
+                    }
+                    if (g != 0) chars.Add(c);
+                }
+            }
+            return chars;
         }
     }
 }
