@@ -137,7 +137,7 @@ EndFunction
 
 ; Whole days until this hold's loan falls due; negative once it is overdue.
 Int Function GetLoanDaysLeft()
-    If !HoldIsValid(CurrentHold) || LoanDue == None
+    If !HoldIsValid(CurrentHold) || !LoansReady()
         Return 0
     EndIf
     Float dueAt = LoanDue[CurrentHold].GetValue()
@@ -147,8 +147,25 @@ Int Function GetLoanDaysLeft()
     Return Math.Floor(dueAt - Utility.GetCurrentGameTime())
 EndFunction
 
+; Reading an array property that was never bound throws "Cannot cast from None to
+; ...[]" on the read itself, so it cannot be guarded by testing the array. A save made
+; before a property existed never binds it, and every later access would throw. These
+; two flags are ordinary object properties, which read back as None harmlessly, and
+; they were introduced alongside the arrays they stand for - so if the flag is None,
+; the arrays are unbound too and must not be touched at all.
+Bool Function HoldsReady()
+    Return HoldCrimeFactions != None
+EndFunction
+
+Bool Function LoansReady()
+    Return LoanTermDays != None && OverduePercent != None
+EndFunction
+
 Bool Function HoldIsValid(Int aiHold)
-    Return aiHold >= 0 && BankBalances && aiHold < BankBalances.Length
+    If aiHold < 0 || !HoldsReady()
+        Return False
+    EndIf
+    Return aiHold < BankBalances.Length
 EndFunction
 
 Int Function GetGlobalInt(GlobalVariable akGlobal)
@@ -452,7 +469,7 @@ EndFunction
 
 ; Whole days this hold's loan has been overdue; 0 while it is still in term.
 Int Function GetOverdueDays(Int aiHold)
-    If !HoldIsValid(aiHold) || LoanDue == None
+    If !HoldIsValid(aiHold) || !LoansReady()
         Return 0
     EndIf
     Float dueAt = LoanDue[aiHold].GetValue()
@@ -475,7 +492,7 @@ EndFunction
 ; The due date itself is never moved: days already charged are counted separately, so
 ; the panel can still say how long the loan has been overdue.
 Function AccrueOverdue(Int aiHold)
-    If !HoldIsValid(aiHold) || LoanDue == None || LoanPrincipal == None || AccruedDays == None
+    If !HoldIsValid(aiHold) || !LoansReady()
         Return
     EndIf
 
@@ -526,7 +543,7 @@ Int Function GetCreditScore(Int aiHold)
 
     Int score = 2
     Int clean = 0
-    If CleanRepayments
+    If LoansReady()
         clean = CleanRepayments[aiHold].GetValueInt()
     EndIf
 
@@ -574,7 +591,7 @@ String Function GetCreditGrade(Int aiHold)
 EndFunction
 
 Bool Function IsOverdue(Int aiHold)
-    If !HoldIsValid(aiHold) || LoanDue == None
+    If !HoldIsValid(aiHold) || !LoansReady()
         Return False
     EndIf
     Float dueAt = LoanDue[aiHold].GetValue()
@@ -582,6 +599,9 @@ Bool Function IsOverdue(Int aiHold)
 EndFunction
 
 Bool Function AnyLoanOutstanding()
+    If !HoldsReady()
+        Return False
+    EndIf
     Int i = 0
     While i < BankDebts.Length
         If BankDebts[i].GetValueInt() > 0
@@ -593,6 +613,10 @@ Bool Function AnyLoanOutstanding()
 EndFunction
 
 Function TakeLoan(Int aiAmount)
+    If !LoansReady()
+        Refresh("이 저장 파일에서는 대출을 취급할 수 없습니다. 새 회차가 필요합니다.")
+        Return
+    EndIf
     If !HoldIsValid(CurrentHold) || Gold001 == None
         Refresh("대출을 취급할 수 없습니다.")
         Return
@@ -623,7 +647,7 @@ Function TakeLoan(Int aiAmount)
     Int owed = aiAmount + ((aiAmount * pct) / 100)
 
     LoanPrincipal[CurrentHold].SetValueInt(aiAmount)
-    If AccruedDays
+    If LoansReady()
         AccruedDays[CurrentHold].SetValueInt(0)
     EndIf
     ledger.SetValueInt(owed)
@@ -636,6 +660,10 @@ Function TakeLoan(Int aiAmount)
 EndFunction
 
 Function RepayLoan(Int aiAmount, Int aiPlayerGold)
+    If !LoansReady()
+        Refresh("이 저장 파일에서는 대출을 취급할 수 없습니다. 새 회차가 필요합니다.")
+        Return
+    EndIf
     If !HoldIsValid(CurrentHold) || Gold001 == None
         Refresh("대출을 취급할 수 없습니다.")
         Return
@@ -680,13 +708,13 @@ Function RepayLoan(Int aiAmount, Int aiPlayerGold)
 
     If owed - paid <= 0
         ; Settled before it ever came due: that is what standing is built on.
-        If CleanRepayments && GetOverdueDays(CurrentHold) <= 0
+        If LoansReady() && GetOverdueDays(CurrentHold) <= 0
             GlobalVariable record = CleanRepayments[CurrentHold]
             record.SetValueInt(record.GetValueInt() + 1)
         EndIf
         LoanDue[CurrentHold].SetValue(0.0)
         LoanPrincipal[CurrentHold].SetValueInt(0)
-        If AccruedDays
+        If LoansReady()
             AccruedDays[CurrentHold].SetValueInt(0)
         EndIf
         RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
@@ -707,13 +735,16 @@ Function ScheduleDunningRun()
 EndFunction
 
 Function SendDunningLetter(Int aiHold)
-    If Courier == None || DunningLetters == None || aiHold >= DunningLetters.Length
+    If Courier == None || !LoansReady() || aiHold >= DunningLetters.Length
         Return
     EndIf
     Courier.addItemToContainer(DunningLetters[aiHold], 1)
 EndFunction
 
 Event OnUpdateGameTime()
+    If !HoldsReady() || !LoansReady()
+        Return
+    EndIf
     Int i = 0
     While i < BankDebts.Length
         AccrueOverdue(i)

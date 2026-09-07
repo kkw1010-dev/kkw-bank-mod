@@ -31,6 +31,41 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "strict")
+            {
+                // The overlay reader is lazy and will happily skip past a record the game
+                // would choke on. Parsing the whole plugin eagerly forces every record to
+                // be read, so a malformed one shows up here instead of as a silently
+                // missing topic in game.
+                var path = @"C:/TAKEALOOK/BankPrismUI/BankPrismUI.esp";
+                var strict = SkyrimMod.CreateFromBinary(path, SkyrimRelease.SkyrimSE);
+
+                Console.WriteLine("엄격 파싱 통과");
+                Console.WriteLine($"  masters      = {string.Join(", ", strict.ModHeader.MasterReferences.Select(m => m.Master.FileName))}");
+                Console.WriteLine($"  globals      = {strict.Globals.Count}");
+                Console.WriteLine($"  quests       = {strict.Quests.Count}");
+                Console.WriteLine($"  books        = {strict.Books.Count}");
+                Console.WriteLine($"  formLists    = {strict.FormLists.Count}");
+                Console.WriteLine($"  dialogTopics = {strict.DialogTopics.Count}");
+                Console.WriteLine($"  dialogBranch = {strict.DialogBranches.Count}");
+
+                int infos = strict.DialogTopics.Sum(d => d.Responses.Count);
+                Console.WriteLine($"  infos        = {infos}");
+
+                Console.WriteLine();
+                Console.WriteLine("  헤더가 신고한 레코드 수와 실제 개수:");
+                Console.WriteLine($"    HEDR.NumRecords = {strict.ModHeader.Stats.NumRecords}");
+                int actual = strict.EnumerateMajorRecords().Count();
+                Console.WriteLine($"    실제 메이저 레코드 = {actual}");
+                Console.WriteLine($"    NextFormID = {strict.ModHeader.Stats.NextFormID:X}");
+
+                uint maxUsed = strict.EnumerateMajorRecords().Max(r => r.FormKey.ID);
+                Console.WriteLine($"    실제 최대 FormID = {maxUsed:X}");
+                if (strict.ModHeader.Stats.NextFormID <= maxUsed)
+                    Console.WriteLine("    *** NextFormID 가 사용 중인 ID 이하입니다 ***");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "stewards")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
