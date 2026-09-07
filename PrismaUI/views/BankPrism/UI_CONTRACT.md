@@ -111,7 +111,7 @@ window.bankAction(payload)
   이유를 확인할 방법이 없다. 현재 쓰는 이름은 다음과 같다:
   - 배경 `bg/<holdKey>.jpg`
   - 문양 `emblems/<holdKey>.png`
-  - 청지기 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
+  - 행정관 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
 
   초상화는 아직 화이트런 것만 그려져 있고, 없는 홀드는 `onerror`로 화이트런 것을
   대신 쓴다. 한 홀드를 추가하려면 파일 다섯 장을 넣기만 하면 되고 JS는 건드릴

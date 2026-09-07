@@ -67,7 +67,30 @@ Int Property CreditHold = 0 Auto Hidden
 Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
+    Trace("OnInit - quest is live in this save")
+    ReportState()
 EndEvent
+
+; Every line this mod writes carries the same prefix, so one grep over
+; Papyrus.0.log answers "did it even start" without reading anything else.
+; Silence used to mean two different things - working, and never loaded - and
+; telling them apart cost a game launch every time.
+Function Trace(String asLine)
+    Debug.Trace("BankPrism: " + asLine)
+EndFunction
+
+; Dumps what is bound and what is not. The property structure is what breaks when
+; the plugin changes under an existing save, and it is invisible from inside the
+; game, so it is written out where it can be read after the fact.
+Function ReportState()
+    Trace("state: running=" + IsRunning() + " stopped=" + IsStopped()         + " holdsReady=" + HoldsReady() + " loansReady=" + LoansReady()         + " standingReady=" + StandingReady() + " hold=" + CurrentHold)
+    Trace("bindings: crimeFactions=" + (HoldCrimeFactions != None)         + " gold=" + (Gold001 != None) + " courier=" + (Courier != None)         + " thaneTracker=" + (ThaneTracker != None) + " civilWar=" + (CivilWar != None)         + " college=" + (CollegeFaction != None))
+    If HoldsReady()
+        Trace("accounts: " + BankBalances.Length + " holds bound")
+    Else
+        Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
+    EndIf
+EndFunction
 
 ; A hotkey costs ten lines and no dependencies. An MCM would need MCM Helper plus a
 ; config json, and SKSE Menu Framework would need ImGui integration in the plugin.
@@ -86,6 +109,11 @@ Event OnKeyDown(Int aiKeyCode)
     If bMenuOpen || Utility.IsInMenuMode()
         Return
     EndIf
+    ; The shortcut doubles as the health check: it says out loud that the quest is
+    ; alive and writes the full state to the log. If pressing it does nothing at
+    ; all, the quest is not running and no amount of UI work will show a topic.
+    Debug.Notification("BankPrism: 퀘스트 동작 중 (홀드 " + GetHoldName(CurrentHold) + ")")
+    ReportState()
     ; No speaker here, so the shortcut reopens whichever hold was last used.
     ShowBank()
 EndEvent
@@ -119,7 +147,7 @@ String Function GetHoldName(Int aiHold)
     ElseIf aiHold == 5
         Return "팔크리스"
     ElseIf aiHold == 6
-        Return "햘마치"
+        Return "하얄마치"
     ElseIf aiHold == 7
         Return "페일"
     ElseIf aiHold == 8
@@ -251,6 +279,8 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"loanLimit\":" + GetLoanLimit() \
         + ", \"creditLimit\":" + GetCreditLimit(CurrentHold) \
         + ", \"tier\":" + GetCreditTier(CurrentHold) \
+        + ", \"paths\":" + CountHeldPaths(CurrentHold) \
+        + ", \"pathList\":\"" + HeldPathList(CurrentHold) + "\"" \
         + ", \"overdueDays\":" + GetOverdueDays(CurrentHold) \
         + ", \"grade\":\"" + GetCreditGrade(CurrentHold) + "\"" \
         + ", \"loanDaysLeft\":" + GetLoanDaysLeft() \
@@ -470,7 +500,7 @@ Int Function GetLoanLimit()
     If !StandingReady() || tier < 1 || tier > LoanLimits.Length
         Return 0
     EndIf
-    Return GetGlobalInt(LoanLimits[tier - 1])
+    Return WithPathBonus(GetGlobalInt(LoanLimits[tier - 1]), CurrentHold)
 EndFunction
 
 Int Function GetLoanTermDays()
@@ -558,30 +588,119 @@ EndFunction
 ;
 ; Path codes are tier * 10 + the branch, in the order the view lists them.
 Int Function EarnedPath(Int aiHold)
-    If IsTier5MainQuest()
-        Return 50
-    ElseIf IsTier5Companions()
-        Return 51
-    ElseIf IsTier5College()
-        Return 52
-    ElseIf IsTier5CivilWar()
-        Return 53
-    ElseIf IsTier4MainQuest()
-        Return 40
-    ElseIf IsTier4Companions()
-        Return 41
-    ElseIf IsTier4College()
-        Return 42
-    ElseIf IsTier4CivilWar()
-        Return 43
-    ElseIf IsThaneOf(aiHold)
+    Int i = 0
+    While i < 4
+        If PathHeld(50 + i, aiHold)
+            Return 50 + i
+        EndIf
+        i += 1
+    EndWhile
+    i = 0
+    While i < 4
+        If PathHeld(40 + i, aiHold)
+            Return 40 + i
+        EndIf
+        i += 1
+    EndWhile
+    If PathHeld(30, aiHold)
         Return 30
-    ElseIf MiscObjectivesDone() >= 30
+    ElseIf PathHeld(31, aiHold)
         Return 31
     ElseIf IsTier2()
         Return 20
     EndIf
     Return 10
+EndFunction
+
+; One route, asked about by code. Every route the Dovahkiin holds is worth
+; something even after the rank is settled, so the same test has to answer both
+; "what names this tier" and "how many ways over did they clear it".
+Bool Function PathHeld(Int aiPath, Int aiHold)
+    If aiPath == 50
+        Return IsTier5MainQuest()
+    ElseIf aiPath == 51
+        Return IsTier5Companions()
+    ElseIf aiPath == 52
+        Return IsTier5College()
+    ElseIf aiPath == 53
+        Return IsTier5CivilWar()
+    ElseIf aiPath == 40
+        Return IsTier4MainQuest()
+    ElseIf aiPath == 41
+        Return IsTier4Companions()
+    ElseIf aiPath == 42
+        Return IsTier4College()
+    ElseIf aiPath == 43
+        Return IsTier4CivilWar()
+    ElseIf aiPath == 30
+        Return IsThaneOf(aiHold)
+    ElseIf aiPath == 31
+        Return MiscObjectivesDone() >= 30
+    EndIf
+    Return False
+EndFunction
+
+; How many of this tier's routes are held, never less than one. Only tiers 3 to 5
+; are counted: those are the ones the view draws as separate routes, and a bonus
+; the player cannot see itemised is a bonus they will think is a bug.
+Int Function CountHeldPaths(Int aiHold)
+    Int tier = GetCreditTier(aiHold)
+    If tier < 3
+        Return 1
+    EndIf
+
+    Int held = 0
+    Int i = 0
+    While i < 4
+        If PathHeld(tier * 10 + i, aiHold)
+            held += 1
+        EndIf
+        i += 1
+    EndWhile
+    If held < 1
+        held = 1
+    EndIf
+    Return held
+EndFunction
+
+; The path codes held at this tier, comma separated, for the view to mark. Empty
+; below tier 3, where the view lists requirements as prose rather than as routes.
+String Function HeldPathList(Int aiHold)
+    Int tier = GetCreditTier(aiHold)
+    If tier < 3
+        Return ""
+    EndIf
+
+    String list = ""
+    Int i = 0
+    While i < 4
+        Int code = tier * 10 + i
+        If PathHeld(code, aiHold)
+            If list == ""
+                list = "" + code
+            Else
+                list = list + "," + code
+            EndIf
+        EndIf
+        i += 1
+    EndWhile
+    Return list
+EndFunction
+
+; Clearing a tier by more than one route raises what it is worth. Kept as a
+; constant rather than a global on purpose: another global would mean another
+; property on the quest, and that invalidates every existing save.
+Int Function ExtraPathBonusPercent()
+    Return 25
+EndFunction
+
+; Applies the multiple-route bonus to a base ceiling.
+Int Function WithPathBonus(Int aiBase, Int aiHold)
+    Int extra = CountHeldPaths(aiHold) - 1
+    If extra <= 0
+        Return aiBase
+    EndIf
+    Return (aiBase * (100 + extra * ExtraPathBonusPercent())) / 100
 EndFunction
 
 Bool Function IsTier5MainQuest()
@@ -778,7 +897,7 @@ Int Function GetCreditLimit(Int aiHold)
     If !StandingReady() || tier < 1 || tier > CreditLimits.Length
         Return 1000
     EndIf
-    Return GetGlobalInt(CreditLimits[tier - 1])
+    Return WithPathBonus(GetGlobalInt(CreditLimits[tier - 1]), aiHold)
 EndFunction
 
 Bool Function IsOverdue(Int aiHold)
@@ -975,5 +1094,10 @@ Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form send
         PayMerchantCredit(playerGold)
     ElseIf strArg == "sellBond"
         Refresh("채권 매각은 서드파티 연동 후 사용할 수 있습니다.")
+    ElseIf StringUtil.Find(strArg, "diag:") == 0
+        ; The view telling us how large a surface PrismaUI actually gave it. There
+        ; is no way to ask from this side, and the answer decides whether blurry
+        ; text is a stretched surface or something in the page.
+        Trace("view surface " + StringUtil.Substring(strArg, 5))
     EndIf
 EndEvent

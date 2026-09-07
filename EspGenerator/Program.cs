@@ -1006,7 +1006,7 @@ namespace EspGenerator
                 ("Rift",       "리프트",     0x02816B),
                 ("Reach",      "리치",       0x02816C),
                 ("Falkreath",  "팔크리스",   0x028170),
-                ("Hjaalmarch", "햘마치",     0x02816D),
+                ("Hjaalmarch", "하얄마치",     0x02816D),
                 ("Pale",       "페일",       0x02816E),
                 ("Winterhold", "윈터홀드",   0x02816F),
             };
@@ -1099,7 +1099,7 @@ namespace EspGenerator
                 if (koreanHold == "화이트런")
                 {
                     return
-                        "위대한 발그루프의 청지기\n\n" +
+                        "위대한 발그루프의 행정관\n\n" +
                         "뵐 수 있기를 기대했으나, 영지 밖에서 귀하의 위대한 대업에 대한 소문만 " +
                         "전해 들을 뿐이군요.\n\n" +
                         "지금 화이트런은 제국과 스톰클로크의 갈등 속에서 홀드를 지켜내기 위해 " +
@@ -1122,7 +1122,7 @@ namespace EspGenerator
                     "때마다 불어나고 있으며, 나는 기다리는 일에 익숙하지 않습니다.\n\n" +
                     "야를의 호의를 배신하지 마십시오.\n\n" +
                     "궁으로 찾아와 장부를 정리하십시오. 다음 서신은 이보다 정중하지 않을 것입니다.\n\n" +
-                    "— " + koreanHold + " 야를의 청지기";
+                    "— " + koreanHold + " 야를의 행정관";
             }
 
             // A letter per hold, handed to the vanilla courier when a loan falls overdue.
@@ -1435,6 +1435,95 @@ namespace EspGenerator
                     Console.WriteLine($"      fragment file={frag?.FileName} onBegin={frag?.OnBegin?.ScriptName}.{frag?.OnBegin?.FragmentName}");
                 }
             }
+
+            AssertDialogueCanWork(check);
+        }
+
+        // Everything here is a condition under which the game shows no topic at all,
+        // reports no error, and writes nothing to any log - which is why each one cost
+        // a session to find. Reading them back off the written file and refusing to
+        // call the build good is the only place they can be caught for free.
+        static void AssertDialogueCanWork(ISkyrimModGetter mod)
+        {
+            var problems = new List<string>();
+
+            var quest = mod.Quests.FirstOrDefault(q => q.EditorID == "BankPrismQuest");
+            if (quest == null)
+            {
+                problems.Add("BankPrismQuest 자체가 없다");
+            }
+            else
+            {
+                // Vanilla dialogue quests are all flags 0x011, type None. Ours was
+                // 0x001/Misc once: the quest ran, the script attached, nothing errored,
+                // and no NPC ever offered a line.
+                if (((int)quest.Flags & 0x011) != 0x011)
+                    problems.Add($"퀘스트 플래그가 0x{(int)quest.Flags:X3} - 0x011 비트가 빠졌다 (대화문이 아무에게도 안 뜬다)");
+                if (quest.Type != Quest.TypeEnum.None)
+                    problems.Add($"퀘스트 종류가 {quest.Type} - None이어야 한다");
+                if ((quest.VirtualMachineAdapter?.Scripts.Count ?? 0) == 0)
+                    problems.Add("퀘스트에 컨트롤러 스크립트가 붙어 있지 않다");
+            }
+
+            foreach (var topic in mod.DialogTopics)
+            {
+                string id = topic.EditorID ?? topic.FormKey.ID.ToString("X6");
+
+                // A player topic outside a top-level branch is never even a candidate
+                // in the dialogue menu.
+                var branchKey = topic.Branch.FormKeyNullable;
+                if (branchKey == null)
+                {
+                    problems.Add($"{id}: 브랜치가 없다 (대화 메뉴에 후보로 오르지 않는다)");
+                }
+                else
+                {
+                    var branch = mod.DialogBranches.FirstOrDefault(b => b.FormKey == branchKey);
+                    if (branch == null)
+                        problems.Add($"{id}: 브랜치 {branchKey} 를 찾을 수 없다");
+                    else if (!branch.Flags.HasValue || !branch.Flags.Value.HasFlag(DialogBranch.Flag.TopLevel))
+                        problems.Add($"{id}: 브랜치가 TopLevel이 아니다");
+                    else if (branch.StartingTopic.FormKeyNullable != topic.FormKey)
+                        problems.Add($"{id}: 브랜치의 시작 토픽이 이 토픽이 아니다");
+                }
+
+                if (topic.Quest.FormKeyNullable != quest?.FormKey)
+                    problems.Add($"{id}: 토픽이 컨트롤러 퀘스트에 매여 있지 않다");
+
+                foreach (var info in topic.Responses)
+                {
+                    string iid = info.EditorID ?? info.FormKey.ID.ToString("X6");
+                    if (info.Conditions.Count == 0)
+                        problems.Add($"{iid}: 조건이 하나도 없다");
+
+                    // An OR group whose last clause has no OR flag is read as
+                    // "(one of the rest) AND (that one)", which nobody satisfies.
+                    // Vanilla INFO 000E3D flags every clause, the last one included.
+                    bool anyOr = info.Conditions.Any(c => c.Flags.HasFlag(Condition.Flag.OR));
+                    if (anyOr && !info.Conditions[info.Conditions.Count - 1].Flags.HasFlag(Condition.Flag.OR))
+                        problems.Add($"{iid}: OR 그룹의 마지막 조건에 OR 플래그가 없다");
+
+                    if (info.Responses.Count == 0)
+                        problems.Add($"{iid}: 응답이 없다");
+
+                    var frag = info.VirtualMachineAdapter?.ScriptFragments;
+                    if (frag?.OnBegin == null)
+                        problems.Add($"{iid}: onBegin 프래그먼트가 붙어 있지 않다");
+                }
+            }
+
+            Console.WriteLine();
+            if (problems.Count == 0)
+            {
+                Console.WriteLine("--- 대화문 불변조건 검사: 통과 ---");
+                return;
+            }
+
+            Console.WriteLine("--- 대화문 불변조건 검사: 실패 ---");
+            foreach (var p in problems) Console.WriteLine("  " + p);
+            Console.WriteLine();
+            Console.WriteLine("이 상태로 배포하면 대화문이 조용히 사라진다. 배포하지 말 것.");
+            Environment.ExitCode = 1;
         }
     }
 }

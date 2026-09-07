@@ -31,7 +31,7 @@
      - C++에서 넘겨준 `BankPrismAction` 이벤트를 수신하여 외상값 상환, 채권 서드파티 모드 연동 등의 게임 로직을 실행합니다.
 
 ## Workflow (동작 흐름)
-1. 인게임에서 청지기(Steward) 등의 NPC와 대화하여 은행 UI 열기 호출.
+1. 인게임에서 행정관(Steward) 등의 NPC와 대화하여 은행 UI 열기 호출.
 2. Papyrus가 C++의 `OpenMenu()` 함수 호출.
 3. C++가 PrismaUI를 통해 `BankView.html`을 화면에 띄우고 게임을 일시정지(Pause)시킴.
 4. UI에서 [상인 외상값 상환] 버튼을 클릭.
