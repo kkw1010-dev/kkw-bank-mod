@@ -29,16 +29,15 @@
       height: 100vh;
     }
 
-    /* The hold's art sits behind everything at low opacity, with a scrim over it so
-       text stays readable whatever the artwork happens to be. */
+    /* Outer Shell: Expanded horizontally (1180px) and vertically (680px) */
     .shell {
       position: relative;
-      width: 860px;
-      height: 560px;
+      width: 1180px;
+      height: 680px;
       border: 1px solid var(--line);
       border-radius: 6px;
       overflow: hidden;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.85);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.92);
       background: var(--ink);
     }
 
@@ -47,14 +46,14 @@
       top: 0; left: 0; right: 0; bottom: 0;
       background-size: cover;
       background-position: center;
-      opacity: 0.30;
+      opacity: 0.25;
     }
 
     .scrim {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
       background:
-        linear-gradient(180deg, rgba(8, 10, 13, 0.88) 0%, rgba(8, 10, 13, 0.62) 40%, rgba(8, 10, 13, 0.92) 100%);
+        linear-gradient(180deg, rgba(8, 10, 13, 0.88) 0%, rgba(8, 10, 13, 0.65) 40%, rgba(8, 10, 13, 0.94) 100%);
     }
 
     .content {
@@ -69,43 +68,60 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 22px 10px;
+      padding: 14px 26px 10px;
       border-bottom: 1px solid var(--line);
     }
 
-    .brand { display: flex; align-items: baseline; gap: 10px; }
-    .brand .hold { color: var(--gold); font-size: 20px; font-weight: bold; letter-spacing: 1px; }
-    .brand .sub { color: var(--muted); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; }
+    .brand { display: flex; align-items: baseline; gap: 12px; }
+    .brand .hold { color: var(--gold); font-size: 22px; font-weight: bold; letter-spacing: 1px; }
+    .brand .sub { color: var(--muted); font-size: 13px; letter-spacing: 3px; text-transform: uppercase; }
 
-    .meters { display: flex; align-items: center; gap: 22px; }
+    .meters { display: flex; align-items: center; gap: 26px; }
     .meter { text-align: right; }
-    .meter .label { color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
-    .meter .value { color: var(--text); font-size: 18px; font-weight: bold; }
+    .meter .label { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+    .meter .value { color: var(--text); font-size: 19px; font-weight: bold; }
     .meter .value.grade-good { color: var(--good); }
     .meter .value.grade-mid { color: var(--gold); }
     .meter .value.grade-bad { color: var(--bad); }
 
+    /* Main split: Left (Tabs + Panels) / Right (Expansion Sidebar) */
+    .main-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .left-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+    }
+
     /* ---- tabs ---- */
-    .tabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line); }
 
     .tab {
-      padding: 10px 18px;
-      font-size: 13px;
+      padding: 11px 22px;
+      font-size: 14px;
       color: var(--muted);
       cursor: pointer;
       border: 1px solid transparent;
       border-bottom: none;
       letter-spacing: 1px;
+      transition: all 0.2s;
     }
     .tab:hover { color: var(--text); }
     .tab.active {
       color: var(--gold);
       border-color: var(--line);
-      background: rgba(212, 175, 55, 0.07);
+      background: rgba(212, 175, 55, 0.08);
+      font-weight: bold;
     }
 
     /* ---- panels ---- */
-    .panels { flex: 1; padding: 16px 22px; overflow: hidden; }
+    .panels { flex: 1; padding: 18px 24px; overflow-y: auto; }
     .panel { display: none; height: 100%; }
     .panel.active { display: flex; flex-direction: column; }
 
@@ -115,22 +131,22 @@
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 10px 14px;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(0, 0, 0, 0.38);
     }
     .figure .label { color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
-    .figure .value { font-size: 22px; font-weight: bold; color: var(--text); }
+    .figure .value { font-size: 22px; font-weight: bold; color: var(--text); margin-top: 4px; }
     .figure .value.negative { color: var(--bad); }
 
     .amount-display {
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0, 0, 0, 0.45);
       border: 1px solid rgba(212, 175, 55, 0.4);
       border-radius: 4px;
-      padding: 8px 12px;
+      padding: 8px 14px;
       font-size: 22px;
       font-weight: bold;
       text-align: right;
       color: var(--gold);
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .amount-display .unit { font-size: 13px; color: var(--gold-dim); margin-left: 4px; }
 
@@ -141,12 +157,13 @@
       background: rgba(212, 175, 55, 0.13);
       color: var(--gold);
       border: 1px solid rgba(212, 175, 55, 0.4);
-      padding: 9px;
+      padding: 10px;
       border-radius: 4px;
       font-size: 13px;
       cursor: pointer;
       text-align: center;
       font-weight: bold;
+      transition: all 0.15s;
     }
     .action-btn:hover { background: rgba(212, 175, 55, 0.28); color: #fff; }
     .action-btn.small { padding: 6px 8px; font-size: 12px; font-weight: normal; }
@@ -155,7 +172,25 @@
 
     .note { color: var(--muted); font-size: 12px; line-height: 1.7; }
 
-    /* ---- ledger ---- */
+    /* 대출탭 내역 박스 */
+    .loan-log-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 120px;
+    }
+    .loan-log-title {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* ---- ledger list ---- */
     .ledger { flex: 1; overflow-y: auto; font-size: 13px; }
     .ledger-empty { color: #6b6459; font-size: 12px; padding: 8px 0; }
     .ledger-row {
@@ -169,12 +204,337 @@
     .ledger-amount.out { color: var(--bad); }
     .ledger-after { color: #6b6459; font-size: 11px; margin-left: 10px; }
 
+    /* ---- 신용등급 심사 및 트래킹 탭 ---- */
+    .grade-track-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(212, 175, 55, 0.08);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    .grade-track-cur {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .grade-cur-label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    .grade-cur-name { font-size: 18px; font-weight: bold; color: var(--gold); }
+    .grade-track-limits { text-align: right; font-size: 12px; color: var(--muted); }
+    .grade-track-limits b { color: var(--text); }
+
+    .grade-guide-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .grade-card {
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 12px 14px;
+      transition: all 0.2s;
+    }
+    .grade-card.current {
+      background: rgba(212, 175, 55, 0.12);
+      border-color: var(--gold);
+      box-shadow: 0 0 14px rgba(212, 175, 55, 0.15);
+    }
+    .grade-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .grade-card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .grade-badge-pill {
+      font-size: 11px;
+      font-weight: bold;
+      padding: 3px 10px;
+      border-radius: 3px;
+      letter-spacing: 1px;
+    }
+    .grade-badge-pill.g5 { background: rgba(127, 201, 127, 0.25); color: var(--good); border: 1px solid var(--good); }
+    .grade-badge-pill.g4 { background: rgba(212, 175, 55, 0.25); color: var(--gold); border: 1px solid var(--gold); }
+    .grade-badge-pill.g3 { background: rgba(100, 180, 240, 0.2); color: #7cc3f2; border: 1px solid #7cc3f2; }
+    .grade-badge-pill.g2 { background: rgba(180, 180, 180, 0.2); color: #ddd; border: 1px solid #aaa; }
+    .grade-badge-pill.g1 { background: rgba(255, 155, 155, 0.2); color: var(--bad); border: 1px solid var(--bad); }
+
+    .grade-card-status {
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .grade-card-status.achieved {
+      color: var(--good);
+      background: rgba(127, 201, 127, 0.15);
+      border: 1px solid var(--good);
+    }
+    .grade-card-status.locked {
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .grade-limits-bar {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .grade-limits-bar span b { color: var(--text); }
+    .grade-limits-bar span.highlight b { color: var(--gold); }
+
+    .grade-req-title {
+      font-size: 11px;
+      color: #9a9284;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .grade-req-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .grade-req-item {
+      font-size: 12px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: #cfc8ba;
+    }
+    .grade-req-item .check {
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .grade-req-item.done { color: #cfc8ba; }
+    .grade-req-item.done .check { color: var(--good); }
+    .grade-req-item.not-done { color: var(--muted); }
+    .grade-req-item.not-done .check { color: #5a5448; }
+
+    .grade-warning-badge {
+      font-size: 11px;
+      color: #ffcf6b;
+      background: rgba(255, 207, 107, 0.1);
+      border: 1px solid rgba(255, 207, 107, 0.3);
+      padding: 4px 8px;
+      border-radius: 3px;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .path-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 4px;
+      border-left: 2px solid rgba(212, 175, 55, 0.3);
+      margin-top: 5px;
+    }
+    .path-row.unlocked {
+      border-left-color: var(--gold);
+      background: rgba(212, 175, 55, 0.08);
+    }
+    .path-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .path-name {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--text);
+    }
+    .path-name.gold { color: var(--gold); }
+    .path-tag {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+    .path-desc {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ---- Right Expansion Section ---- */
+    .right-section {
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      background: rgba(5, 7, 10, 0.65);
+      padding: 16px 20px;
+      gap: 14px;
+    }
+
+    /* 2. Top Emblem Box */
+    .emblem-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      height: 155px;
+      position: relative;
+    }
+    .emblem-img {
+      max-height: 105px;
+      max-width: 105px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
+      transition: all 0.3s;
+    }
+    .emblem-name {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--gold);
+      letter-spacing: 2px;
+      font-weight: bold;
+    }
+
+    /* 3. Bottom Steward / Administration Box */
+    .steward-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .steward-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .steward-title {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .steward-grade-badge {
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 3px;
+      background: rgba(212, 175, 55, 0.15);
+      border: 1px solid var(--line);
+    }
+
+    /* Slot for Portrait or Reserved area */
+    .steward-slot {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    /* 대출탭 / 신용등급탭: 5단계 초상화 및 대사 */
+    .portrait-view {
+      display: none;
+      height: 100%;
+      flex-direction: column;
+    }
+    .portrait-view.active { display: flex; }
+
+    .portrait-img-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .portrait-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 15%;
+      transition: opacity 0.3s ease;
+    }
+    .portrait-info {
+      padding: 10px 12px;
+      background: rgba(8, 10, 13, 0.9);
+      border-top: 1px solid var(--line);
+      text-align: center;
+    }
+    .portrait-dialogue {
+      font-size: 12px;
+      color: #ede7dc;
+      line-height: 1.5;
+      word-break: keep-all;
+    }
+    .portrait-speaker {
+      font-size: 11px;
+      color: var(--gold-dim);
+      margin-top: 5px;
+      letter-spacing: 1px;
+    }
+
+    /* 4. 예금/외상 탭: 확보된 공간 (슬롯) */
+    .reserved-view {
+      display: none;
+      height: 100%;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .reserved-view.active { display: flex; }
+
+    .reserved-icon {
+      font-size: 26px;
+      color: var(--gold-dim);
+      margin-bottom: 8px;
+      opacity: 0.6;
+    }
+    .reserved-title {
+      font-size: 13px;
+      color: var(--gold);
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .reserved-desc {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
     /* ---- footer ---- */
     .footer {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 22px 14px;
+      padding: 10px 24px 14px;
       border-top: 1px solid var(--line);
     }
     .status { flex: 1; font-size: 12px; color: var(--good); }
@@ -197,8 +557,8 @@
       </div>
       <div class="meters">
         <div class="meter">
-          <div class="label">신용</div>
-          <div class="value grade-mid" id="valGrade">보통</div>
+          <div class="label">신용등급</div>
+          <div class="value grade-mid" id="valGrade">정체모를 용병</div>
         </div>
         <div class="meter">
           <div class="label">소지금</div>
@@ -207,107 +567,316 @@
       </div>
     </div>
 
-    <div class="tabs">
-      <div class="tab active" id="tab-deposit" onclick="showTab('deposit')">예금</div>
-      <div class="tab" id="tab-loan" onclick="showTab('loan')">대출</div>
-      <div class="tab" id="tab-credit" onclick="showTab('credit')">외상</div>
-      <div class="tab" id="tab-ledger" onclick="showTab('ledger')">기록</div>
-    </div>
+    <!-- Main Body: Left UI + Right Expansion Section -->
+    <div class="main-body">
 
-    <div class="panels">
+      <!-- Left Column: Tabs & Operation Panels -->
+      <div class="left-section">
+        <div class="tabs">
+          <div class="tab active" id="tab-deposit" onclick="showTab('deposit')">예금</div>
+          <div class="tab" id="tab-loan" onclick="showTab('loan')">대출</div>
+          <div class="tab" id="tab-credit" onclick="showTab('credit')">외상</div>
+          <div class="tab" id="tab-grade" onclick="showTab('grade')">신용등급</div>
+        </div>
 
-      <!-- 예금 -->
-      <div class="panel active" id="panel-deposit">
-        <div class="figure-row">
-          <div class="figure">
-            <div class="label">맡긴 금액</div>
-            <div class="value" id="valBalance">0 G</div>
+        <div class="panels">
+
+          <!-- 예금 -->
+          <div class="panel active" id="panel-deposit">
+            <div class="figure-row">
+              <div class="figure">
+                <div class="label">맡긴 금액</div>
+                <div class="value" id="valBalance">0 G</div>
+              </div>
+              <div class="figure">
+                <div class="label">소지금</div>
+                <div class="value" id="valWallet2">0 G</div>
+              </div>
+            </div>
+
+            <div class="amount-display"><span id="amountText">0</span><span class="unit">G</span></div>
+
+            <div class="btn-row">
+              <button class="action-btn small" onclick="addAmount(10)">+10</button>
+              <button class="action-btn small" onclick="addAmount(100)">+100</button>
+              <button class="action-btn small" onclick="addAmount(1000)">+1,000</button>
+              <button class="action-btn small" onclick="addAmount(10000)">+10,000</button>
+              <button class="action-btn small" onclick="setAmount(0)">지움</button>
+            </div>
+            <div class="btn-row">
+              <button class="action-btn small" onclick="fillAll('wallet')">지갑 전액</button>
+              <button class="action-btn small" onclick="fillAll('balance')">예금 전액</button>
+            </div>
+            <div class="btn-row">
+              <button class="action-btn" onclick="handleTransaction('deposit')">입금하기</button>
+              <button class="action-btn" onclick="handleTransaction('withdraw')">출금하기</button>
+            </div>
           </div>
-          <div class="figure">
-            <div class="label">소지금</div>
-            <div class="value" id="valWallet2">0 G</div>
+
+          <!-- 대출 -->
+          <div class="panel" id="panel-loan">
+            <div class="figure-row">
+              <div class="figure">
+                <div class="label">남은 채무</div>
+                <div class="value negative" id="valDebt">0 G</div>
+              </div>
+              <div class="figure">
+                <div class="label">대출 한도</div>
+                <div class="value" id="valLoanLimit">0 G</div>
+              </div>
+              <div class="figure">
+                <div class="label">만기</div>
+                <div class="value" id="valLoanDue">—</div>
+              </div>
+            </div>
+
+            <div class="amount-display"><span id="amountText2">0</span><span class="unit">G</span></div>
+
+            <div class="btn-row">
+              <button class="action-btn small" onclick="addAmount(100)">+100</button>
+              <button class="action-btn small" onclick="addAmount(1000)">+1,000</button>
+              <button class="action-btn small" onclick="addAmount(10000)">+10,000</button>
+              <button class="action-btn small" onclick="fillAll('limit')">한도 전액</button>
+              <button class="action-btn small" onclick="setAmount(0)">지움</button>
+            </div>
+            <div class="btn-row">
+              <button class="action-btn" onclick="sendAmountAction('borrow')">대출받기</button>
+              <button class="action-btn" onclick="sendAmountAction('repay')">상환하기</button>
+            </div>
+
+            <!-- 대출 거래 기록 섹션 (도바킨 행적 문구 제거 후 추가) -->
+            <div class="loan-log-section">
+              <div class="loan-log-title">대출 거래 기록</div>
+              <div class="ledger" id="loanLog">
+                <div class="ledger-empty">최근 대출/상환 거래가 없습니다.</div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="amount-display"><span id="amountText">0</span><span class="unit">G</span></div>
+          <!-- 외상 -->
+          <div class="panel" id="panel-credit">
+            <div class="figure-row">
+              <div class="figure">
+                <div class="label">외상금</div>
+                <div class="value negative" id="valCreditDebt">0 G</div>
+              </div>
+            </div>
+            <div class="note">
+              외상은 이 홀드의 잡화상에게 직접 청해야 합니다.<br>
+              장부에 오를 때 20%가 가산되며, 이후 늘어나지는 않습니다.<br>
+              상환은 소지금부터, 모자라면 금고에서 빠집니다.
+            </div>
+            <div class="btn-row" style="margin-top: 14px;">
+              <button class="action-btn" onclick="sendAction('payCredit')">외상값 상환</button>
+              <button class="action-btn" onclick="sendAction('sellBond')">채권 매각</button>
+            </div>
+          </div>
 
-        <div class="btn-row">
-          <button class="action-btn small" onclick="addAmount(10)">+10</button>
-          <button class="action-btn small" onclick="addAmount(100)">+100</button>
-          <button class="action-btn small" onclick="addAmount(1000)">+1,000</button>
-          <button class="action-btn small" onclick="addAmount(10000)">+10,000</button>
-          <button class="action-btn small" onclick="setAmount(0)">지움</button>
-        </div>
-        <div class="btn-row">
-          <button class="action-btn small" onclick="fillAll('wallet')">지갑 전액</button>
-          <button class="action-btn small" onclick="fillAll('balance')">예금 전액</button>
-        </div>
-        <div class="btn-row">
-          <button class="action-btn" onclick="handleTransaction('deposit')">입금하기</button>
-          <button class="action-btn" onclick="handleTransaction('withdraw')">출금하기</button>
+          <!-- 신용등급 심사 및 트래킹 탭 -->
+          <div class="panel" id="panel-grade">
+            <div class="grade-track-summary">
+              <div class="grade-track-cur">
+                <span class="grade-cur-label">현재 공인 신용등급</span>
+                <span class="grade-cur-name" id="trackCurrentGradeName">정체모를 용병</span>
+              </div>
+              <div class="grade-track-limits">
+                금융 한도: 대출 <b id="trackCurrentLoan">불가</b> · 외상한도 <b id="trackCurrentCredit">1,500 G</b>
+              </div>
+            </div>
+
+            <div class="grade-guide-list">
+
+              <!-- 5단계: 전설적인 구원자 등급군 -->
+              <div class="grade-card" id="card-5단계">
+                <div class="grade-card-head">
+                  <div class="grade-card-title">
+                    <span class="grade-badge-pill g5">5단계 · 전설 등급</span>
+                    <span id="tier5Title" style="font-size: 13px; color: var(--gold); font-weight: bold;">탐리엘의 구원자</span>
+                  </div>
+                  <span class="grade-card-status locked" id="status-5단계">미달성</span>
+                </div>
+                <div class="grade-limits-bar">
+                  <span class="highlight">대출한도 <b>25,000 G</b></span>
+                  <span>외상한도 <b>6,000 G</b></span>
+                </div>
+                <div class="grade-req-title">최초 달성 경로에 따라 영구 고정되는 등급명</div>
+                
+                <div class="path-row" id="path-5-mq">
+                  <div class="path-head"><span class="path-name gold">A. 탐리엘의 구원자 (Savior of Tamriel)</span><span class="path-tag">메인 퀘스트</span></div>
+                  <div class="path-desc">◇ 소븐가르드에서 알두인 최종 처치 (메인 퀘스트 완결)</div>
+                </div>
+                <div class="path-row" id="path-5-comp">
+                  <div class="path-head"><span class="path-name gold">B. 컴패니언의 인도자 (Harbinger)</span><span class="path-tag">컴패니언</span></div>
+                  <div class="path-desc">◇ 이스그라모르의 의지를 잇는 컴패니언 최고 수장 등극</div>
+                </div>
+                <div class="path-row" id="path-5-mage">
+                  <div class="path-head"><span class="path-name gold">C. 대학의 아크메이지 (Arch-Mage)</span><span class="path-tag">마법대학</span></div>
+                  <div class="path-desc">◇ 윈터홀드 마법사 대학의 최고위 아크메이지 등극</div>
+                </div>
+                <div class="path-row" id="path-5-cw">
+                  <div class="path-head"><span class="path-name gold">D. 전쟁 영웅 장군 (Grand Legate / Storm-blade)</span><span class="path-tag">내전 군단</span></div>
+                  <div class="path-desc">◇ 제국군 레가투스 or 스톰클록 스톰블레이드 최고 총사령관 임명</div>
+                </div>
+              </div>
+
+              <!-- 4단계: 영웅의 반열 등급군 -->
+              <div class="grade-card" id="card-4단계">
+                <div class="grade-card-head">
+                  <div class="grade-card-title">
+                    <span class="grade-badge-pill g4">4단계 · 영웅 등급</span>
+                    <span id="tier4Title" style="font-size: 13px; color: var(--gold); font-weight: bold;">스카이림의 영웅</span>
+                  </div>
+                  <span class="grade-card-status locked" id="status-4단계">미달성</span>
+                </div>
+                <div class="grade-limits-bar">
+                  <span class="highlight">대출한도 <b>12,000 G</b></span>
+                  <span>외상한도 <b>3,500 G</b></span>
+                </div>
+                <div class="grade-req-title">최초 달성 경로에 따라 영구 고정되는 등급명</div>
+
+                <div class="path-row" id="path-4-mq">
+                  <div class="path-head"><span class="path-name">A. 스카이림의 영웅 (Hero of Skyrim)</span><span class="path-tag">메인 퀘스트</span></div>
+                  <div class="path-desc">◇ 세계의 목(Throat of the World)에서 알두인 1차 격퇴</div>
+                </div>
+                <div class="path-row" id="path-4-comp">
+                  <div class="path-head"><span class="path-name">B. 요르바스크의 전사 (Circle Warrior)</span><span class="path-tag">컴패니언</span></div>
+                  <div class="path-desc">◇ 요르바스크의 핵심 서클 멤버(Circle Member) 진입</div>
+                </div>
+                <div class="path-row" id="path-4-mage">
+                  <div class="path-head"><span class="path-name">C. 수석 마법학자 (College Wizard)</span><span class="path-tag">마법대학</span></div>
+                  <div class="path-desc">◇ 윈터홀드 마법대학 정식 고위 위자드(Wizard) 등극</div>
+                </div>
+                <div class="path-row" id="path-4-cw">
+                  <div class="path-head"><span class="path-name">D. 훈장 수훈 장교 (Decorated Officer)</span><span class="path-tag">내전 군단</span></div>
+                  <div class="path-desc">◇ 제국군/스톰클록 중간 간부(Prefect / Commander) 진급</div>
+                </div>
+                <div class="grade-warning-badge">
+                  ⚠️ <b>제한 규칙:</b> 단순 반복형 잡다한 퀘스트 횟수로는 승급 불가. 공인된 역사적 업적 또는 핵심 지위로만 증명됩니다.
+                </div>
+              </div>
+
+              <!-- 3단계: 영지의 친구 등급군 -->
+              <div class="grade-card" id="card-3단계">
+                <div class="grade-card-head">
+                  <div class="grade-card-title">
+                    <span class="grade-badge-pill g3">3단계 · 신뢰 등급</span>
+                    <span id="tier3Title" style="font-size: 13px; color: #7cc3f2; font-weight: bold;">영지의 종사</span>
+                  </div>
+                  <span class="grade-card-status locked" id="status-3단계">미달성</span>
+                </div>
+                <div class="grade-limits-bar">
+                  <span class="highlight">대출한도 <b>5,000 G</b></span>
+                  <span>외상한도 <b>2,000 G</b></span>
+                </div>
+                <div class="grade-req-title">최초 달성 경로에 따라 영구 고정되는 등급명</div>
+
+                <div class="path-row" id="path-3-thane">
+                  <div class="path-head"><span class="path-name">A. 영지의 종사 (Thane of the Hold)</span><span class="path-tag">영지 평판</span></div>
+                  <div class="path-desc">◇ 해당 영지의 정식 종사(Thane) 임명 완료</div>
+                </div>
+                <div class="path-row" id="path-3-misc">
+                  <div class="path-head"><span class="path-name">B. 신뢰받는 해결사 (Trusted Fixer)</span><span class="path-tag">잡다한 의뢰</span></div>
+                  <div class="path-desc">◇ 영지 내 잡다한 일거리(Misc Quests) 30개 이상 완수</div>
+                </div>
+              </div>
+
+              <!-- 2단계: 정체모를 용병 -->
+              <div class="grade-card" id="card-2단계">
+                <div class="grade-card-head">
+                  <div class="grade-card-title">
+                    <span class="grade-badge-pill g2">2단계 · 용병 등급</span>
+                    <span style="font-size: 13px; color: #ddd; font-weight: bold;">정체모를 용병 (Unknown Mercenary)</span>
+                  </div>
+                  <span class="grade-card-status achieved" id="status-2단계">달성</span>
+                </div>
+                <div class="grade-limits-bar">
+                  <span>대출한도 <b>대출 불가</b></span>
+                  <span>외상한도 <b>1,500 G</b></span>
+                </div>
+                <div class="grade-req-title">승급 요건 (아래 중 1개 이상 충족 시)</div>
+                <ul class="grade-req-list">
+                  <li class="grade-req-item"><span class="check">◇</span> 마법대학 입학 완료 or 컴패니언 신입 가입 완료</li>
+                  <li class="grade-req-item"><span class="check">◇</span> 잡다한 일거리(Misc Quests) 10개 이상 완수</li>
+                  <li class="grade-req-item"><span class="check">◇</span> 발그루프 영주에게 드래곤 습격 보고 (Dragon Rising 시작)</li>
+                  <li class="grade-req-item"><span class="check">◇</span> 제국군 / 스톰클록 가입 직후 등급 (Auxiliary / Unblooded)</li>
+                </ul>
+              </div>
+
+              <!-- 1단계: 외지인 -->
+              <div class="grade-card" id="card-1단계">
+                <div class="grade-card-head">
+                  <div class="grade-card-title">
+                    <span class="grade-badge-pill g1">1단계 · 기본 등급</span>
+                    <span style="font-size: 13px; color: var(--bad); font-weight: bold;">외지인 (Outsider)</span>
+                  </div>
+                  <span class="grade-card-status achieved" id="status-1단계">기본 상태</span>
+                </div>
+                <div class="grade-limits-bar">
+                  <span>대출한도 <b>대출 불가</b></span>
+                  <span>외상한도 <b>1,000 G</b></span>
+                </div>
+                <div class="grade-req-title">승급 요건</div>
+                <ul class="grade-req-list">
+                  <li class="grade-req-item done"><span class="check">✔</span> 스카이림에 갓 도착한 기본 상태</li>
+                </ul>
+              </div>
+
+            </div>
+          </div>
+
         </div>
       </div>
 
-      <!-- 대출 -->
-      <div class="panel" id="panel-loan">
-        <div class="figure-row">
-          <div class="figure">
-            <div class="label">남은 채무</div>
-            <div class="value negative" id="valDebt">0 G</div>
+      <!-- Right Column: 1. UI 우측 확장 칸 -->
+      <div class="right-section">
+
+        <!-- 2. 확장칸 상단: 홀드별 문양 -->
+        <div class="emblem-card">
+          <img id="holdEmblemImg" class="emblem-img" src="emblems/화이트런.png" alt="홀드 문양">
+          <div id="holdEmblemName" class="emblem-name">화이트런</div>
+        </div>
+
+        <!-- 3 & 4. 확장칸 하단: 청지기 초상화(대출/신용등급 탭) / 공간 확보 슬롯(예금·외상 탭) -->
+        <div class="steward-card">
+          <div class="steward-header">
+            <span class="steward-title" id="stewardRoleTitle">화이트런 행정관</span>
+            <span class="steward-grade-badge" id="stewardBadge">정체모를 용병</span>
           </div>
-          <div class="figure">
-            <div class="label">대출 한도</div>
-            <div class="value" id="valLoanLimit">0 G</div>
-          </div>
-          <div class="figure">
-            <div class="label">만기</div>
-            <div class="value" id="valLoanDue">—</div>
-          </div>
-        </div>
 
-        <div class="amount-display"><span id="amountText2">0</span><span class="unit">G</span></div>
+          <div class="steward-slot">
 
-        <div class="btn-row">
-          <button class="action-btn small" onclick="addAmount(100)">+100</button>
-          <button class="action-btn small" onclick="addAmount(1000)">+1,000</button>
-          <button class="action-btn small" onclick="addAmount(10000)">+10,000</button>
-          <button class="action-btn small" onclick="fillAll('limit')">한도 전액</button>
-          <button class="action-btn small" onclick="setAmount(0)">지움</button>
-        </div>
-        <div class="btn-row">
-          <button class="action-btn" onclick="sendAmountAction('borrow')">대출받기</button>
-          <button class="action-btn" onclick="sendAmountAction('repay')">상환하기</button>
-        </div>
+            <!-- 3. 대출/신용등급 탭 전용: 신용등급 5단계 프로벤투스 초상화 및 한줄 대사 -->
+            <div class="portrait-view" id="right-loan">
+              <div class="portrait-img-wrap">
+                <img id="portraitImg" class="portrait-img" src="portraits/프로벤투스 정체모를 용병.jpg" alt="청지기 초상화">
+              </div>
+              <div class="portrait-info">
+                <div class="portrait-dialogue" id="portraitQuote">"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."</div>
+                <div class="portrait-speaker" id="portraitSpeaker">프로벤투스 아베니치</div>
+              </div>
+            </div>
 
-        <div class="note" id="loanNote">
-          한도는 도바킨의 행적에 따릅니다. 이름 없는 칼잡이에게 내어줄 돈은 없습니다.
-        </div>
-      </div>
+            <!-- 4. 예금탭 공간 확보 -->
+            <div class="reserved-view active" id="right-deposit">
+              <div class="reserved-icon">⚜</div>
+              <div class="reserved-title">홀드 금고 예치처</div>
+              <div class="reserved-desc">
+                야를의 보증 아래 안전하게 보관되는 공식 예치금 금고입니다.
+              </div>
+            </div>
 
-      <!-- 외상 -->
-      <div class="panel" id="panel-credit">
-        <div class="figure-row">
-          <div class="figure">
-            <div class="label">외상금</div>
-            <div class="value negative" id="valCreditDebt">0 G</div>
+            <!-- 4. 외상탭 공간 확보 -->
+            <div class="reserved-view" id="right-credit">
+              <div class="reserved-icon">⚖</div>
+              <div class="reserved-title">상인 외상 장부</div>
+              <div class="reserved-desc">
+                영지 내 상인 길드와 연계된 미납 외상 거래 채권 관리처입니다.
+              </div>
+            </div>
+
           </div>
         </div>
-        <div class="note">
-          외상은 이 홀드의 잡화상에게 직접 청해야 합니다.<br>
-          장부에 오를 때 20%가 가산되며, 이후 늘어나지는 않습니다.<br>
-          상환은 소지금부터, 모자라면 금고에서 빠집니다.
-        </div>
-        <div class="btn-row" style="margin-top: 14px;">
-          <button class="action-btn" onclick="sendAction('payCredit')">외상값 상환</button>
-          <button class="action-btn" onclick="sendAction('sellBond')">채권 매각</button>
-        </div>
-      </div>
 
-      <!-- 기록 -->
-      <div class="panel" id="panel-ledger">
-        <div class="ledger" id="txLog">
-          <div class="ledger-empty">아직 거래가 없습니다.</div>
-        </div>
       </div>
 
     </div>
@@ -321,9 +890,9 @@
 </div>
 
 <script>
-  var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0, loanLimit: 0, loanDaysLeft: 0, overdueDays: 0 };
+  var state = { wallet: 0, balance: 0, debt: 0, creditDebt: 0, loanLimit: 0, loanDaysLeft: 0, overdueDays: 0, hold: '화이트런', grade: '보통' };
   var amount = 0;
-  var entries = [];
+  var loanEntries = [];
   var currentTab = 'deposit';
 
   function comma(n) {
@@ -336,7 +905,7 @@
     el.className = isWarning ? 'status warn' : 'status';
   }
 
-  var TABS = ['deposit', 'loan', 'credit', 'ledger'];
+  var TABS = ['deposit', 'loan', 'credit', 'grade'];
 
   function showTab(name) {
     currentTab = name;
@@ -344,6 +913,27 @@
       var t = TABS[i];
       document.getElementById('tab-' + t).className = (t === name) ? 'tab active' : 'tab';
       document.getElementById('panel-' + t).className = (t === name) ? 'panel active' : 'panel';
+    }
+
+    // Right-side view switching:
+    // loan and grade tabs show the portrait & steward speech.
+    // deposit and credit tabs show their reserved slot view.
+    var pView = document.getElementById('right-loan');
+    var dView = document.getElementById('right-deposit');
+    var cView = document.getElementById('right-credit');
+
+    if (name === 'loan' || name === 'grade') {
+      pView.className = 'portrait-view active';
+      dView.className = 'reserved-view';
+      cView.className = 'reserved-view';
+    } else if (name === 'credit') {
+      pView.className = 'portrait-view';
+      dView.className = 'reserved-view';
+      cView.className = 'reserved-view active';
+    } else { // deposit
+      pView.className = 'portrait-view';
+      dView.className = 'reserved-view active';
+      cView.className = 'reserved-view';
     }
   }
 
@@ -394,7 +984,6 @@
       setStatus('금액을 선택해 주세요.', true);
       return;
     }
-    // Papyrus does the authoritative check; this only avoids a pointless round trip.
     var available = (type === 'deposit') ? state.wallet : state.balance;
     if (amount > available) {
       setStatus(type === 'deposit' ? '지갑에 골드가 부족합니다.' : '예금 잔고가 부족합니다.', true);
@@ -403,26 +992,27 @@
     sendAction(type, amount);
   }
 
-  var LABELS = { deposit: '입금', withdraw: '출금', payCredit: '외상 상환', borrow: '대출', repay: '대출 상환' };
+  var LABELS = { deposit: '입금', withdraw: '출금', payCredit: '외상 상환', borrow: '대출 실행', repay: '대출 상환' };
   var INFLOW = { deposit: false, withdraw: true, payCredit: false, borrow: true, repay: false };
 
-  // Only this session's transactions; nothing is written to the save.
-  function addEntry(type, value, balanceAfter) {
-    entries.unshift({ type: type, value: value, after: balanceAfter });
-    if (entries.length > 12) { entries.pop(); }
+  // Loan transactions are shown inside the Loan Panel
+  function addLoanEntry(type, value, debtAfter) {
+    loanEntries.unshift({ type: type, value: value, after: debtAfter });
+    if (loanEntries.length > 8) { loanEntries.pop(); }
 
-    var log = document.getElementById('txLog');
+    var log = document.getElementById('loanLog');
+    if (!log) return;
     log.innerHTML = '';
-    for (var i = 0; i < entries.length; i++) {
-      var e = entries[i];
-      var gain = INFLOW[e.type];
+    for (var i = 0; i < loanEntries.length; i++) {
+      var e = loanEntries[i];
+      var isBorrow = (e.type === 'borrow');
       var row = document.createElement('div');
       row.className = 'ledger-row';
       row.innerHTML =
         '<span class="ledger-kind">' + (LABELS[e.type] || e.type) + '</span>' +
-        '<span><span class="ledger-amount ' + (gain ? 'in' : 'out') + '">' +
-        (gain ? '+' : '-') + comma(e.value) + ' G</span>' +
-        '<span class="ledger-after">예금 ' + comma(e.after) + ' G</span></span>';
+        '<span><span class="ledger-amount ' + (isBorrow ? 'out' : 'in') + '">' +
+        (isBorrow ? '+' : '-') + comma(e.value) + ' G</span>' +
+        '<span class="ledger-after">잔액 ' + comma(e.after) + ' G</span></span>';
       log.appendChild(row);
     }
   }
@@ -432,12 +1022,268 @@
     if (el) { el.innerText = text; }
   }
 
+  /* 2. 홀드별 문양 매핑 테이블 */
+  var EMBLEM_MAP = {
+    '화이트런': 'emblems/화이트런.png',
+    '솔리튜드': 'emblems/솔리튜드.png',
+    '하핀가르': 'emblems/솔리튜드.png',
+    '윈드헬름': 'emblems/윈드헬름.png',
+    '이스트마치': 'emblems/윈드헬름.png',
+    '리프튼': 'emblems/리프튼.png',
+    '더 리프트': 'emblems/리프튼.png',
+    '마르카스': 'emblems/마르카스.png',
+    '더 리치': 'emblems/마르카스.png',
+    '윈터홀드': 'emblems/윈터홀드.png',
+    '던스타': 'emblems/던스타.png',
+    '페일': 'emblems/던스타.png',
+    '모탈': 'emblems/모탈.png',
+    '흐얄마치': 'emblems/모탈.png',
+    '팔크리스': 'emblems/팔크리스.png',
+    '포크리스': 'emblems/팔크리스.png'
+  };
+
+  /* 3. 3~5단계 최초 달성 경로별 세부 신용등급명, 초상화, 프로벤투스 전용 대사 */
+  var GRADE_DATA = {
+    // 1단계
+    '외지인': {
+      tier: 1,
+      tierName: '1단계',
+      portrait: 'portraits/프로벤투스 외지인.jpg',
+      quote: '"신원도 불확실한 외지인에게 내줄 금화는 없네. 장난칠 생각 말고 당장 물러서게."',
+      classType: 'bad',
+      loan: '불가', credit: '1,000 G'
+    },
+    // 2단계
+    '정체모를 용병': {
+      tier: 2,
+      tierName: '2단계',
+      portrait: 'portraits/프로벤투스 정체모를 용병.jpg',
+      quote: '"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."',
+      classType: 'mid',
+      loan: '불가', credit: '1,500 G'
+    },
+
+    // 3단계 A: 영지 평판
+    '영지의 종사': {
+      tier: 3,
+      tierName: '3단계',
+      pathKey: 'path-3-thane',
+      portrait: 'portraits/프로벤투스 영지의 친구.jpg',
+      quote: '"아, 우리 영지의 정식 종사(Thane)이신 분이군요. 야를의 특별 보증 범위 안에서 정중히 모시겠습니다."',
+      classType: 'good',
+      loan: '5,000 G', credit: '2,000 G'
+    },
+    // 3단계 B: 잡다한 의뢰
+    '신뢰받는 해결사': {
+      tier: 3,
+      tierName: '3단계',
+      pathKey: 'path-3-misc',
+      portrait: 'portraits/프로벤투스 영지의 친구.jpg',
+      quote: '"영지 곳곳의 궂은일을 도맡아 해결해 주셨다고 들었네. 그 정직한 노동의 가치를 믿고 한도를 내어주지."',
+      classType: 'good',
+      loan: '5,000 G', credit: '2,000 G'
+    },
+
+    // 4단계 A: 메인 퀘스트
+    '스카이림의 영웅': {
+      tier: 4,
+      tierName: '4단계',
+      pathKey: 'path-4-mq',
+      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
+      quote: '"스카이림의 영웅을 맞이하게 되어 영광입니다. 야를의 뜻에 따라 원하시는 자금을 즉시 마련해 드리지요."',
+      classType: 'good',
+      loan: '12,000 G', credit: '3,500 G'
+    },
+    // 4단계 B: 컴패니언
+    '요르바스크의 전사': {
+      tier: 4,
+      tierName: '4단계',
+      pathKey: 'path-4-comp',
+      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
+      quote: '"요르바스크의 명예로운 동료이자 용맹한 전사여. 그 강인한 기백은 영지 금고보다도 든든한 신용 보증서라네."',
+      classType: 'good',
+      loan: '12,000 G', credit: '3,500 G'
+    },
+    // 4단계 C: 마법대학
+    '수석 마법학자': {
+      tier: 4,
+      tierName: '4단계',
+      pathKey: 'path-4-mage',
+      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
+      quote: '"윈터홀드 대학의 고위 마법사이시군요. 학파의 지성과 영광에 걸맞은 금융 편의를 제공해 드리겠습니다."',
+      classType: 'good',
+      loan: '12,000 G', credit: '3,500 G'
+    },
+    // 4단계 D: 내전 군단
+    '훈장 수훈 장교': {
+      tier: 4,
+      tierName: '4단계',
+      pathKey: 'path-4-cw',
+      portrait: 'portraits/프로벤투스 영웅의 반열.jpg',
+      quote: '"치열한 전선에서 군공을 세우신 사령관님을 맞이합니다. 군부의 신용을 보증 삼아 최우대 조치를 취하겠습니다."',
+      classType: 'good',
+      loan: '12,000 G', credit: '3,500 G'
+    },
+
+    // 5단계 A: 메인 퀘스트
+    '탐리엘의 구원자': {
+      tier: 5,
+      tierName: '5단계',
+      pathKey: 'path-5-mq',
+      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
+      quote: '"오, 탐리엘의 구원자이시여! 영지의 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."',
+      classType: 'good',
+      loan: '25,000 G', credit: '6,000 G'
+    },
+    // 5단계 B: 컴패니언
+    '컴패니언의 인도자': {
+      tier: 5,
+      tierName: '5단계',
+      pathKey: 'path-5-comp',
+      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
+      quote: '"이스그라모르의 의지를 잇는 인도자(Harbinger)시여. 요르바스크의 무한한 명예를 걸고, 최고의 한도를 보장합니다."',
+      classType: 'good',
+      loan: '25,000 G', credit: '6,000 G'
+    },
+    // 5단계 C: 마법대학
+    '대학의 아크메이지': {
+      tier: 5,
+      tierName: '5단계',
+      pathKey: 'path-5-mage',
+      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
+      quote: '"마법의 정점에 서신 아크메이지를 뵙습니다. 영지의 영예이신 당신께 금고의 모든 신용 편의를 개방합니다."',
+      classType: 'good',
+      loan: '25,000 G', credit: '6,000 G'
+    },
+    // 5단계 D: 내전 군단
+    '전쟁 영웅 장군': {
+      tier: 5,
+      tierName: '5단계',
+      pathKey: 'path-5-cw',
+      portrait: 'portraits/프로벤투스 전설적인 구원자.jpg',
+      quote: '"스카이림에 승리를 가져다준 최고 총사령관 각하! 군의 절대적인 신용 보증서가 발행되었으니 마음껏 융통하십시오."',
+      classType: 'good',
+      loan: '25,000 G', credit: '6,000 G'
+    }
+  };
+
+  // 기존 바닐라/파피루스 6단계 호환 정규화
+  function resolveGradeData(rawGrade) {
+    if (!rawGrade) return GRADE_DATA['정체모를 용병'];
+    if (GRADE_DATA[rawGrade]) return GRADE_DATA[rawGrade];
+    // 레거시 명칭 맵
+    if (rawGrade === '신뢰') return GRADE_DATA['탐리엘의 구원자'];
+    if (rawGrade === '우량') return GRADE_DATA['스카이림의 영웅'];
+    if (rawGrade === '양호' || rawGrade === '종사') return GRADE_DATA['영지의 종사'];
+    if (rawGrade === '보통') return GRADE_DATA['정체모를 용병'];
+    if (rawGrade === '주의' || rawGrade === '불량') return GRADE_DATA['외지인'];
+    return GRADE_DATA['정체모를 용병'];
+  }
+
+  function updateHoldEmblem(holdName) {
+    var imgEl = document.getElementById('holdEmblemImg');
+    var nameEl = document.getElementById('holdEmblemName');
+    var roleEl = document.getElementById('stewardRoleTitle');
+
+    if (nameEl) nameEl.innerText = holdName;
+    if (roleEl) roleEl.innerText = holdName + ' 행정관';
+
+    var emblemFile = 'emblems/화이트런.png';
+    for (var key in EMBLEM_MAP) {
+      if (holdName && holdName.indexOf(key) !== -1) {
+        emblemFile = EMBLEM_MAP[key];
+        break;
+      }
+    }
+    if (imgEl) imgEl.src = emblemFile;
+  }
+
+  function updateStewardPortrait(gradeName) {
+    var info = resolveGradeData(gradeName);
+    var normGrade = gradeName;
+    for (var key in GRADE_DATA) {
+      if (GRADE_DATA[key] === info) {
+        normGrade = key;
+        break;
+      }
+    }
+
+    var imgEl = document.getElementById('portraitImg');
+    var quoteEl = document.getElementById('portraitQuote');
+    var badgeEl = document.getElementById('stewardBadge');
+    var gradeMeterEl = document.getElementById('valGrade');
+
+    if (imgEl) imgEl.src = info.portrait;
+    if (quoteEl) quoteEl.innerText = info.quote;
+
+    if (badgeEl) {
+      badgeEl.innerText = normGrade;
+      badgeEl.style.color = (info.classType === 'good') ? 'var(--good)' : (info.classType === 'bad' ? 'var(--bad)' : 'var(--gold)');
+    }
+
+    if (gradeMeterEl) {
+      gradeMeterEl.innerText = normGrade;
+      gradeMeterEl.className = 'value ' + ((info.classType === 'good') ? 'grade-good' : (info.classType === 'bad' ? 'grade-bad' : 'grade-mid'));
+    }
+
+    // 신용등급 심사 탭 상단 요약 갱신
+    setText('trackCurrentGradeName', normGrade);
+    setText('trackCurrentLoan', info.loan);
+    setText('trackCurrentCredit', info.credit);
+
+    // 동적 타이틀 갱신 (3~5단계 카드 헤더 타이틀에 현재 해금된 칭호명 반영)
+    if (info.tier === 3) setText('tier3Title', normGrade);
+    if (info.tier === 4) setText('tier4Title', normGrade);
+    if (info.tier === 5) setText('tier5Title', normGrade);
+
+    // 5단계 카드 하이라이트 및 달성 상태 갱신
+    var curTier = info.tier;
+    var tiers = [1, 2, 3, 4, 5];
+
+    tiers.forEach(function(t) {
+      var card = document.getElementById('card-' + t + '단계');
+      var statusBadge = document.getElementById('status-' + t + '단계');
+
+      if (card) {
+        if (t === curTier) {
+          card.classList.add('current');
+        } else {
+          card.classList.remove('current');
+        }
+      }
+
+      if (statusBadge) {
+        if (t === curTier) {
+          statusBadge.innerText = '현재 등급 (영구 고정)';
+          statusBadge.className = 'grade-card-status achieved';
+        } else if (t < curTier) {
+          statusBadge.innerText = '달성 완료';
+          statusBadge.className = 'grade-card-status achieved';
+        } else {
+          statusBadge.innerText = '미달성 (심사 중)';
+          statusBadge.className = 'grade-card-status locked';
+        }
+      }
+    });
+
+    // 해당 해금 경로(Path) 하이라이트
+    var allPaths = document.querySelectorAll('.path-row');
+    allPaths.forEach(function(p) { p.classList.remove('unlocked'); });
+    if (info.pathKey) {
+      var pEl = document.getElementById(info.pathKey);
+      if (pEl) pEl.classList.add('unlocked');
+    }
+  }
+
   window.bankUpdateParams = function (jsonString) {
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
 
-      // Accounts are per hold; the speaker decides which hold this panel shows.
-      if (data.hold !== undefined) { setText('holdName', data.hold); }
+      if (data.hold !== undefined) {
+        state.hold = data.hold;
+        setText('holdName', data.hold);
+        updateHoldEmblem(data.hold);
+      }
       if (data.holdKey !== undefined) {
         document.getElementById('art').style.backgroundImage = "url('bg/" + data.holdKey + ".jpg')";
       }
@@ -463,31 +1309,27 @@
         setText('valLoanDue', due);
       }
       if (data.grade !== undefined) {
-        var el = document.getElementById('valGrade');
-        el.innerText = data.grade;
-        var good = (data.grade === '신뢰' || data.grade === '우량');
-        var bad = (data.grade === '주의' || data.grade === '불량');
-        el.className = 'value ' + (good ? 'grade-good' : (bad ? 'grade-bad' : 'grade-mid'));
+        state.grade = data.grade;
+        updateStewardPortrait(data.grade);
       }
       if (data.overdueDays !== undefined) { state.overdueDays = data.overdueDays; }
 
-      if (state.loanLimit <= 0) {
-        setText('loanNote', '야를의 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.');
-      } else if (state.overdueDays > 0) {
-        setText('loanNote', '기한이 지났습니다. 하루가 지날 때마다 장부가 불어나고, 청지기가 사람을 보냅니다.');
-      } else {
-        setText('loanNote', '야를의 호의에는 서명할 때 한 번 가산이 붙습니다. 기한을 넘기면 날마다 더해집니다.');
-      }
       if (data.message !== undefined) { setStatus(data.message, false); }
 
       if (data.txType) {
-        addEntry(data.txType, data.txAmount || 0, state.balance);
+        if (data.txType === 'borrow' || data.txType === 'repay') {
+          addLoanEntry(data.txType, data.txAmount || 0, state.debt);
+        }
         setAmount(0);
       }
     } catch (e) {
       setStatus('데이터를 읽지 못했습니다.', true);
     }
   };
+
+  // Initial call with defaults
+  updateHoldEmblem('화이트런');
+  updateStewardPortrait('정체모를 용병');
 </script>
 </body>
 </html>
