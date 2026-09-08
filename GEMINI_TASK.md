@@ -206,7 +206,7 @@ dotnet run
 그 다음 배포:
 
 ```
-powershell -File C:\TAKEALOOK\BankPrismUI\deploy.ps1
+powershell -ExecutionPolicy Bypass -File C:\TAKEALOOK\BankPrismUI\deploy.ps1
 ```
 
 UI(HTML·그림)만 고쳤다면 `dotnet run` 없이 `deploy.ps1`만 돌려도 됩니다.

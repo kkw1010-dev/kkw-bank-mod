@@ -142,8 +142,13 @@ one from a previous build.
 ### 4. Deploy to Mod Organizer 2
 
 ```
-powershell -File deploy.ps1
+powershell -ExecutionPolicy Bypass -File deploy.ps1
 ```
+
+`-ExecutionPolicy Bypass` is not optional here: both the CurrentUser and
+LocalMachine policies on this machine are Undefined, so PowerShell falls back to
+Restricted and refuses to load the file at all. The switch applies to that one
+invocation and changes nothing on the system.
 
 Copies the runtime files to `C:\TAKEALOOK\mods\BankPrismUI`. Enabling the mod
 and the plugin in Mod Organizer 2 is done in its interface.

@@ -128,7 +128,7 @@ window.bankAction(payload)
 저장소 최상위에서 배포 스크립트를 돌려야 게임에 반영된다.
 
 ```
-powershell -File deploy.ps1
+powershell -ExecutionPolicy Bypass -File deploy.ps1
 ```
 
 HTML만 고쳤다면 이것만 하면 되고, 게임은 다시 켜야 한다.
