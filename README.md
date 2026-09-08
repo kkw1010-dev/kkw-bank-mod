@@ -147,3 +147,21 @@ powershell -File deploy.ps1
 
 Copies the runtime files to `C:\TAKEALOOK\mods\BankPrismUI`. Enabling the mod
 and the plugin in Mod Organizer 2 is done in its interface.
+
+Writing there directly bypasses MO2, so the CRDW Auto Mode plugin has no reason
+to rebuild its directory cache and the next launch runs in LOAD mode against a
+stale index. That cache holds the file index for `Data\Scripts`, not file
+contents, so overwriting an existing `.pex` is harmless - but a `.pex` that is
+new or renamed would be absent from the index, and the engine would never learn
+it exists. No error, no log line. The script therefore:
+
+- deletes `data_scripts_.cache` **only** when the set of paths under `Scripts\`
+  changed, since invalidating costs a full rebuild of that cache;
+- otherwise reads the cache and fails if a deployed `.pex` is missing from it,
+  so the gap between "deployed" and "the game can see it" closes here rather
+  than in a play session;
+- does neither, without failing, where CRDW is not installed.
+
+Papyrus sources are not deployed - the game never reads them and they only widen
+the index. Pass `-IncludeSources` to ship them anyway, which is what a public
+release would conventionally do.
