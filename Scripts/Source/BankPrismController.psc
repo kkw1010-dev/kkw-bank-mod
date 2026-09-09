@@ -67,6 +67,7 @@ Int Property CreditHold = 0 Auto Hidden
 Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
+    EnsureDunningRun()
     Trace("OnInit - quest is live in this save")
     ReportState()
 EndEvent
@@ -247,6 +248,7 @@ Function ShowBank()
     ; script is recompiled, and the UI would then accept clicks that never arrive.
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
+    EnsureDunningRun()
     bMenuOpen = True
     AccrueOverdue(CurrentHold)
     BankPrismNative.OpenMenu()
@@ -1049,6 +1051,20 @@ EndFunction
 ; stops itself once the ledger is clear.
 Function ScheduleDunningRun()
     RegisterForSingleUpdateGameTime(1.0)
+    Trace("dunning: armed, next check in one game day")
+EndFunction
+
+; Re-arms the daily check whenever a loan is outstanding. A game-time registration
+; does not survive the script being replaced, and Borrow() was the only place that
+; ever made one, so any rebuild between sessions left the courier silent for the
+; rest of the playthrough - and silent is exactly what a mod with no outstanding
+; loan looks like, which is why it went unnoticed. Cheap to call: at most one
+; registration a game day, and OnUpdateGameTime drops the chain once the ledger
+; is clear.
+Function EnsureDunningRun()
+    If AnyLoanOutstanding()
+        ScheduleDunningRun()
+    EndIf
 EndFunction
 
 ; Seven letters per hold, one per day overdue, so the court's patience visibly
@@ -1060,6 +1076,7 @@ EndFunction
 
 Function SendDunningLetter(Int aiHold)
     If Courier == None || !LoansReady() || aiHold < 0
+        Trace("dunning: not sent - courier=" + (Courier != None) + " loansReady=" + LoansReady() + " hold=" + aiHold)
         Return
     EndIf
 
@@ -1079,23 +1096,36 @@ Function SendDunningLetter(Int aiHold)
     EndIf
 
     Courier.addItemToContainer(DunningLetters[slot], 1)
+    Trace("dunning: " + GetHoldName(aiHold) + " day " + day + " letter (slot " + slot + ") handed to the courier")
 EndFunction
 
 Event OnUpdateGameTime()
+    ; Re-arm before anything can return. This used to leave without rescheduling,
+    ; and one unlucky tick then ended the daily run for the rest of the game with
+    ; nothing written down to say it had happened.
     If !HoldsReady() || !LoansReady()
+        Trace("dunning: tick skipped - holdsReady=" + HoldsReady() + " loansReady=" + LoansReady())
+        ScheduleDunningRun()
         Return
     EndIf
+
+    Int overdueHolds = 0
     Int i = 0
     While i < BankDebts.Length
         AccrueOverdue(i)
         If IsOverdue(i)
             SendDunningLetter(i)
+            overdueHolds += 1
         EndIf
         i += 1
     EndWhile
 
-    If AnyLoanOutstanding()
+    Bool stillOwing = AnyLoanOutstanding()
+    Trace("dunning: tick done, overdue holds=" + overdueHolds + " outstanding=" + stillOwing)
+    If stillOwing
         ScheduleDunningRun()
+    Else
+        Trace("dunning: ledger clear, chain stops here")
     EndIf
 EndEvent
 
