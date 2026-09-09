@@ -56,14 +56,20 @@
       top: 0; left: 0; right: 0; bottom: 0;
       background-size: cover;
       background-position: center;
-      opacity: 0.25;
+      background-image: url('bg/whiterun.jpg');
+      opacity: 0.55;
     }
 
     .scrim {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
       background:
-        linear-gradient(180deg, rgba(8, 10, 13, 0.88) 0%, rgba(8, 10, 13, 0.65) 40%, rgba(8, 10, 13, 0.94) 100%);
+        linear-gradient(180deg,
+          rgba(8, 10, 13, 0.82) 0%,
+          rgba(8, 10, 13, 0.52) 15%,
+          rgba(8, 10, 13, 0.35) 45%,
+          rgba(8, 10, 13, 0.45) 75%,
+          rgba(8, 10, 13, 0.88) 100%);
     }
 
     .content {
@@ -131,7 +137,12 @@
     }
 
     /* ---- panels ---- */
-    .panels { flex: 1; padding: 25px 34px; overflow-y: auto; }
+    .panels {
+      flex: 1;
+      padding: 25px 34px;
+      overflow-y: auto;
+      background: rgba(8, 10, 13, 0.28);
+    }
     .panel { display: none; height: 100%; }
     .panel.active { display: flex; flex-direction: column; }
 
@@ -141,14 +152,14 @@
       border: 1px solid var(--line);
       border-radius: 6px;
       padding: 14px 20px;
-      background: rgba(0, 0, 0, 0.38);
+      background: rgba(0, 0, 0, 0.45);
     }
     .figure .label { color: var(--muted); font-size: 14px; letter-spacing: 0; text-transform: uppercase; }
     .figure .value { font-size: 31px; font-weight: bold; color: var(--text); margin-top: 6px; }
     .figure .value.negative { color: var(--bad); }
 
     .amount-display {
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.50);
       border: 1px solid rgba(212, 175, 55, 0.4);
       border-radius: 6px;
       padding: 11px 20px;
@@ -423,6 +434,315 @@
       color: var(--muted);
     }
 
+    /* ---- 담보 (Collateral) 탭 스타일링 ---- */
+    .col-summary-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .col-summary-box {
+      flex: 1;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px 18px;
+      background: rgba(0, 0, 0, 0.45);
+      position: relative;
+    }
+    .col-summary-label {
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .col-summary-val {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--text);
+      margin-top: 5px;
+    }
+    .col-summary-val.gold { color: var(--gold); }
+    .col-summary-val.good { color: var(--good); }
+    .col-summary-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* 서브 네비게이션 바 (현물 / 보증인 / 부동산) */
+    .col-nav-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+    .col-nav-btn {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 17px;
+      font-family: inherit;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+    .col-nav-btn:hover {
+      color: var(--text);
+      background: rgba(212, 175, 55, 0.12);
+      border-color: rgba(212, 175, 55, 0.5);
+    }
+    .col-nav-btn.active {
+      color: var(--gold);
+      background: rgba(212, 175, 55, 0.18);
+      border-color: var(--gold);
+      font-weight: bold;
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.15);
+    }
+    .col-nav-count {
+      font-size: 13px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+    .col-nav-btn.active .col-nav-count {
+      background: var(--gold);
+      color: #1a1403;
+      font-weight: bold;
+    }
+
+    /* 서브 뷰 컨테이너 */
+    .col-sub-view {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .col-sub-view.active {
+      display: flex;
+    }
+
+    .col-banner {
+      background: rgba(212, 175, 55, 0.08);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-left: 4px solid var(--gold);
+      padding: 12px 18px;
+      border-radius: 5px;
+      font-size: 15px;
+      color: #e0d8c7;
+      line-height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* 개별 담보 카드 */
+    .col-card {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--line);
+      border-left: 5px solid rgba(212, 175, 55, 0.4);
+      border-radius: 6px;
+      padding: 16px 20px;
+      transition: all 0.2s;
+    }
+    .col-card:hover {
+      border-color: rgba(212, 175, 55, 0.5);
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .col-card.pledged {
+      border-left-color: var(--good);
+    }
+    .col-card.available {
+      border-left-color: var(--gold);
+      border-style: dashed;
+      border-left-style: solid;
+    }
+
+    .col-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .col-card-title-grp {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .col-icon {
+      font-size: 20px;
+    }
+    .col-card-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--text);
+    }
+    .col-badge {
+      font-size: 13px;
+      font-weight: bold;
+      padding: 3px 9px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .col-badge.goods {
+      background: rgba(100, 180, 240, 0.18);
+      color: #7cc3f2;
+      border: 1px solid #7cc3f2;
+    }
+    .col-badge.guarantor {
+      background: rgba(127, 201, 127, 0.18);
+      color: var(--good);
+      border: 1px solid var(--good);
+    }
+    .col-badge.property {
+      background: rgba(212, 175, 55, 0.18);
+      color: var(--gold);
+      border: 1px solid var(--gold);
+    }
+    .col-status-pill {
+      font-size: 14px;
+      font-weight: bold;
+      padding: 4px 12px;
+      border-radius: 4px;
+    }
+    .col-status-pill.active {
+      color: var(--good);
+      background: rgba(127, 201, 127, 0.15);
+      border: 1px solid var(--good);
+    }
+    .col-status-pill.available {
+      color: var(--gold);
+      background: rgba(212, 175, 55, 0.15);
+      border: 1px solid var(--gold);
+    }
+    .col-status-pill.unregistered {
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px dashed rgba(255, 255, 255, 0.2);
+    }
+
+    .col-card-metrics {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: var(--muted);
+    }
+    .col-card-metrics span b {
+      color: var(--text);
+    }
+    .col-card-metrics span.highlight b {
+      color: var(--gold);
+    }
+
+    .col-card-desc {
+      font-size: 15px;
+      color: #b5ad9e;
+      line-height: 22px;
+      margin-bottom: 10px;
+    }
+
+    .col-quote-box {
+      background: rgba(0, 0, 0, 0.28);
+      border-left: 3px solid var(--gold-dim);
+      padding: 9px 14px;
+      border-radius: 4px;
+      font-size: 15px;
+      color: #ede7dc;
+      font-style: italic;
+      margin-bottom: 10px;
+      line-height: 22px;
+    }
+
+    .col-action-row {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .col-btn {
+      padding: 7px 16px;
+      font-size: 15px;
+      font-family: inherit;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.15s;
+    }
+    .col-btn.primary {
+      background: rgba(212, 175, 55, 0.2);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+    }
+    .col-btn.primary:hover {
+      background: var(--gold);
+      color: #1a1403;
+    }
+    .col-btn.secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ccc;
+    }
+    .col-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .col-register-box {
+      border: 2px dashed rgba(212, 175, 55, 0.35);
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .col-register-box:hover {
+      border-color: var(--gold);
+      background: rgba(212, 175, 55, 0.06);
+    }
+    .col-register-text {
+      color: var(--gold);
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .col-register-sub {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    /* 우측 확장 영역 담보 규정 스펙 */
+    .col-side-specs {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      border-top: 1px solid rgba(212, 175, 55, 0.2);
+      padding-top: 14px;
+    }
+    .col-spec-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 15px;
+    }
+    .col-spec-lbl {
+      color: var(--muted);
+    }
+    .col-spec-val {
+      color: var(--gold);
+      font-weight: bold;
+    }
+
     /* ---- Right Expansion Section ---- */
     .right-section {
       width: 476px;
@@ -529,6 +849,13 @@
       object-position: 50% 15%;
       transition: opacity 0.3s ease;
     }
+    .vault-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      transition: opacity 0.3s ease;
+    }
     .portrait-info {
       padding: 14px 17px;
       background: rgba(8, 10, 13, 0.9);
@@ -627,6 +954,7 @@
           <div class="tab active" id="tab-deposit" onclick="showTab('deposit')">예금</div>
           <div class="tab" id="tab-loan" onclick="showTab('loan')">대출</div>
           <div class="tab" id="tab-credit" onclick="showTab('credit')">외상</div>
+          <div class="tab" id="tab-collateral" onclick="showTab('collateral')">담보</div>
           <div class="tab" id="tab-grade" onclick="showTab('grade')">신용등급</div>
         </div>
 
@@ -638,6 +966,7 @@
               <div class="figure">
                 <div class="label">맡긴 금액</div>
                 <div class="value" id="valBalance">0 G</div>
+                <div id="valVaultStage" style="font-size: 14px; color: var(--gold); margin-top: 4px; letter-spacing: 0.5px;">1단계 금고 (0 ~ 1,000 G)</div>
               </div>
               <div class="figure">
                 <div class="label">소지금</div>
@@ -740,6 +1069,263 @@
                 <div class="ledger-empty">최근 외상 상환 거래가 없습니다.</div>
               </div>
             </div>
+          </div>
+
+          <!-- 담보 -->
+          <div class="panel" id="panel-collateral">
+            <!-- 요약 KPI 바 -->
+            <div class="col-summary-row">
+              <div class="col-summary-box">
+                <div class="col-summary-label">총 담보 평가액</div>
+                <div class="col-summary-val gold" id="colValTotal">27,500 G</div>
+                <div class="col-summary-sub">영지 공증 완료 자산 가치 합계</div>
+              </div>
+              <div class="col-summary-box">
+                <div class="col-summary-label">담보 대출 한도 (LTV 60%)</div>
+                <div class="col-summary-val good" id="colValLoanLine">+16,500 G</div>
+                <div class="col-summary-sub">대출 탭 한도에 즉시 증액 반영</div>
+              </div>
+              <div class="col-summary-box">
+                <div class="col-summary-label">설정 자산 건수</div>
+                <div class="col-summary-val" id="colValCount">5 건</div>
+                <div class="col-summary-sub">현물 3 · 보증 1 · 부동산 1</div>
+              </div>
+            </div>
+
+            <!-- 서브 카테고리 네비게이션: 현물 / 보증인 / 부동산 -->
+            <div class="col-nav-bar">
+              <button class="col-nav-btn active" id="col-btn-goods" onclick="showCollateralSub('goods')">
+                <span class="col-icon">💎</span>
+                <span>현물 담보</span>
+                <span class="col-nav-count">3</span>
+              </button>
+              <button class="col-nav-btn" id="col-btn-guarantor" onclick="showCollateralSub('guarantor')">
+                <span class="col-icon">🛡️</span>
+                <span>보증인 연대</span>
+                <span class="col-nav-count">2</span>
+              </button>
+              <button class="col-nav-btn" id="col-btn-property" onclick="showCollateralSub('property')">
+                <span class="col-icon">🏰</span>
+                <span>부동산 저당</span>
+                <span class="col-nav-count">2</span>
+              </button>
+            </div>
+
+            <!-- 1. 현물 담보 서브 뷰 -->
+            <div class="col-sub-view active" id="col-view-goods">
+              <div class="col-banner">
+                <span>📦 <b>영지 금고 위탁 귀중품</b>: 보석류, 귀금속 주괴, 공인 아티팩트를 금고에 물리 위탁하여 즉시 한도를 산정받습니다.</span>
+                <span style="font-size: 13px; color: var(--gold);">인정비율 60%</span>
+              </div>
+
+              <!-- 현물 카드 1 -->
+              <div class="col-card pledged">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">💎</span>
+                    <span class="col-card-title">완벽한 다이아몬드 (Flawless Diamond) × 2</span>
+                    <span class="col-badge goods">보석류</span>
+                  </div>
+                  <span class="col-status-pill active">금고 위탁 완료</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>시장 평가액 <b>2,000 G</b></span>
+                  <span class="highlight">담보 인정액 <b>1,200 G (60%)</b></span>
+                  <span>위탁 번호 <b>WH-GEM-014</b></span>
+                </div>
+                <div class="col-card-desc">
+                  화이트런 궁정 보석 세공사의 정품 각인이 완료된 최고 순도 무결점 다이아몬드입니다. 영주 금고 특수 격실에 보관 중입니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn secondary" onclick="clickCollateralAction('완벽한 다이아몬드 위탁 보관증(WH-GEM-014)이 정상 확인되었습니다.')">보관증 확인</button>
+                  <button class="col-btn primary" onclick="clickCollateralAction('대출 전액 상환 후 금고에서 위탁 물품을 회수할 수 있습니다.')">회수 신청</button>
+                </div>
+              </div>
+
+              <!-- 현물 카드 2 -->
+              <div class="col-card pledged">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">⛏️</span>
+                    <span class="col-card-title">에보니 주괴 묶음 (Ebony Ingots) × 10</span>
+                    <span class="col-badge goods">전략 금속</span>
+                  </div>
+                  <span class="col-status-pill active">금고 위탁 완료</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>시장 평가액 <b>1,500 G</b></span>
+                  <span class="highlight">담보 인정액 <b>900 G (60%)</b></span>
+                  <span>위탁 번호 <b>WH-ING-088</b></span>
+                </div>
+                <div class="col-card-desc">
+                  나린달 광산 출하 공인 제련소의 순도 검증 인장이 날인된 에보니 주괴 묶음입니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn secondary" onclick="clickCollateralAction('에보니 주괴 묶음 위탁 보관증(WH-ING-088)이 확인되었습니다.')">보관증 확인</button>
+                  <button class="col-btn primary" onclick="clickCollateralAction('대출 전액 상환 후 금고에서 위탁 물품을 회수할 수 있습니다.')">회수 신청</button>
+                </div>
+              </div>
+
+              <!-- 현물 카드 3 -->
+              <div class="col-card pledged">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">👑</span>
+                    <span class="col-card-title">드래곤 프리스트 가면: 크로시스 (Krosis)</span>
+                    <span class="col-badge goods">고대 유물</span>
+                  </div>
+                  <span class="col-status-pill active">특수 결계 보관</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>시장 평가액 <b>8,000 G</b></span>
+                  <span class="highlight">담보 인정액 <b>4,800 G (60%)</b></span>
+                  <span>위탁 번호 <b>WH-ART-002</b></span>
+                </div>
+                <div class="col-card-desc">
+                  시어포인트에서 발굴된 전설적인 유물. 궁정 마법사 파렌가 시크릿-파이어의 마법 감정 및 봉인 결계 보관이 완료되었습니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn secondary" onclick="clickCollateralAction('크로시스 가면의 마법 봉인 상태가 완벽하게 유지되고 있습니다.')">결계 점검</button>
+                  <button class="col-btn primary" onclick="clickCollateralAction('고대 아티팩트는 모든 채무 변제 시 야를의 입회하에 반환됩니다.')">회수 신청</button>
+                </div>
+              </div>
+
+              <!-- 추가 등록 박스 -->
+              <div class="col-register-box" onclick="clickCollateralAction('인벤토리 내 담보 등록 가능한 귀중품(보석/주괴/아티팩트)을 조회합니다.')">
+                <div class="col-register-text">+ 인벤토리 귀중품 담보 추가 위탁 등록</div>
+                <div class="col-register-sub">보석, 귀금속 주괴, 드래곤 프리스트 가면 등을 금고에 위탁하여 한도를 증액합니다.</div>
+              </div>
+            </div>
+
+            <!-- 2. 보증인 담보 서브 뷰 -->
+            <div class="col-sub-view" id="col-view-guarantor">
+              <div class="col-banner">
+                <span>🛡️ <b>인적 연대 보증</b>: 종사 호위무사(하우스칼) 또는 명망 높은 팩션 간부의 명예와 신용을 담보로 설정합니다.</span>
+                <span style="font-size: 13px; color: var(--gold);">신용 연대 보증</span>
+              </div>
+
+              <!-- 보증인 카드 1: 리디아 -->
+              <div class="col-card pledged">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">🗡️</span>
+                    <span class="col-card-title">리디아 (Lydia)</span>
+                    <span class="col-badge guarantor">종사 하우스칼</span>
+                  </div>
+                  <span class="col-status-pill active">연대보증 유효</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>연대 보증 한도 <b style="color: var(--gold);">+5,000 G</b></span>
+                  <span>보증 등급 <b>영지 최고 신용 (1순위)</b></span>
+                  <span>공증 일자 <b>제4시대 201년</b></span>
+                </div>
+                <div class="col-quote-box">
+                  "영주님의 칙령에 따라, 제 목숨과 검을 걸고 당신의 채무를 전액 보증합니다. 제 맹세는 흔들리지 않습니다."
+                </div>
+                <div class="col-card-desc">
+                  화이트런 영주 발그루프가 임명한 공식 가신. 종사 호위무사의 영지 내 공인 보증력이 적용되어 최고 등급의 한도가 보증됩니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn secondary" onclick="clickCollateralAction('리디아의 종사 호위무사 연대보증 서약서가 영지 공증 장부에 등재되어 있습니다.')">보증 서약서 열람</button>
+                </div>
+              </div>
+
+              <!-- 보증인 카드 2: 에일라 (계약 대기/가능 상태) -->
+              <div class="col-card available">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">🏹</span>
+                    <span class="col-card-title">사냥꾼 에일라 (Aela the Huntress)</span>
+                    <span class="col-badge guarantor">컴패니언즈 서클</span>
+                  </div>
+                  <span class="col-status-pill available">보증 계약 가능</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>예상 보증 한도 <b style="color: var(--gold);">+4,500 G</b></span>
+                  <span>자격 <b>요르바스크 핵심 서클</b></span>
+                  <span>신뢰도 <b>우수 (동료)</b></span>
+                </div>
+                <div class="col-quote-box">
+                  "도망칠 생각은 마. 만약 네가 빚을 떼먹어서 내 이름에 먹칠을 하면, 내가 직접 널 사냥할 테니까."
+                </div>
+                <div class="col-card-desc">
+                  요르바스크 핵심 서클 전사의 명성을 바탕으로 한 전사 조합 연대보증이 가능합니다. 체결 시 즉시 한도가 확장됩니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn primary" onclick="clickCollateralAction('에일라와의 연대보증 계약 서류가 영지 공증관에게 제출 대기 중입니다.')">연대보증 계약 체결</button>
+                </div>
+              </div>
+
+              <!-- 추가 등록 박스 -->
+              <div class="col-register-box" onclick="clickCollateralAction('동행 중인 영지 가신이나 팩션 핵심 동료를 공증인 앞에 출석시켜 연대보증인으로 등재할 수 있습니다.')">
+                <div class="col-register-text">+ 신규 동료/가신 보증인 심사 신청</div>
+                <div class="col-register-sub">친밀도가 높은 동료 또는 팩션 간부를 공증인 앞에 출석시켜 연대보증 한도를 증액합니다.</div>
+              </div>
+            </div>
+
+            <!-- 3. 부동산 담보 서브 뷰 -->
+            <div class="col-sub-view" id="col-view-property">
+              <div class="col-banner">
+                <span>🏰 <b>영지 공인 부동산 근저당</b>: 야를에게 공인받은 가옥과 대저택의 소유권 문서를 금고에 공증 저당합니다.</span>
+                <span style="font-size: 13px; color: var(--gold);">근저당 LTV 60%</span>
+              </div>
+
+              <!-- 부동산 카드 1: 브리즈홈 -->
+              <div class="col-card pledged">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">🏡</span>
+                    <span class="col-card-title">브리즈홈 (Breezehome)</span>
+                    <span class="col-badge property">화이트런 평원지구</span>
+                  </div>
+                  <span class="col-status-pill active">근저당 1순위 설정</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>공인 감정가 <b>16,000 G</b></span>
+                  <span class="highlight">담보 대출 한도 <b>9,600 G (60%)</b></span>
+                  <span>등기 <b>화이트런 제1호</b></span>
+                </div>
+                <div class="col-card-desc">
+                  화이트런 성문 인근 복층 가옥 (연금술 실험실 및 가구 증축 완료). 화이트런 영주실 금고에 제1순위 근저당권이 설정되어 있습니다.
+                </div>
+                <div class="grade-warning-badge" style="margin-top: 4px; margin-bottom: 8px;">
+                  ⚠️ <b>채무 불이행 특약:</b> 대출 만기 후 연체 30일 초과 시, 행정관 프로벤투스의 집행 아래 즉시 강제 경매 공매 처분 공고가 발령됩니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn secondary" onclick="clickCollateralAction('브리즈홈 제1순위 근저당권 설정 등기부 등본이 정상 확인되었습니다.')">등기부 등본 열람</button>
+                </div>
+              </div>
+
+              <!-- 부동산 카드 2: 헬야첸 홀 -->
+              <div class="col-card available">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">🏰</span>
+                    <span class="col-card-title">헬야첸 홀 (Heljarchen Hall)</span>
+                    <span class="col-badge property">페일 영지 대저택</span>
+                  </div>
+                  <span class="col-status-pill available">소유권 확인 · 저당 미설정</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>공인 감정가 <b>25,000 G</b></span>
+                  <span class="highlight">담보 가능 한도 <b>15,000 G (60%)</b></span>
+                  <span>상태 <b>등기 신청 대기</b></span>
+                </div>
+                <div class="col-card-desc">
+                  페일 영지 영주에게 정식 매입하여 자가 축조한 3층 대저택 및 무기고/연금술 탑. 현재 저당권 미설정 상태로 즉시 대규모 한도 설정이 가능합니다.
+                </div>
+                <div class="col-action-row">
+                  <button class="col-btn primary" onclick="clickCollateralAction('헬야첸 홀 근저당권 설정 등기 신청서가 접수되었습니다.')">근저당권 설정 등기</button>
+                </div>
+              </div>
+
+              <!-- 추가 등록 박스 -->
+              <div class="col-register-box" onclick="clickCollateralAction('타 영지(솔리튜드 프라우드스파이어, 리프튼 허니사이드 등)의 가옥 매매 계약서를 공증인에게 제출합니다.')">
+                <div class="col-register-text">+ 타 영지 가옥/토지 매매 계약서 공증 제출</div>
+                <div class="col-register-sub">스카이림 각 영지에서 매입한 주택이나 장원 토지의 소유권 증서를 제출하여 담보를 설정합니다.</div>
+              </div>
+            </div>
+
           </div>
 
           <!-- 신용등급 심사 및 트래킹 탭 -->
@@ -927,21 +1513,42 @@
               </div>
             </div>
 
-            <!-- 4. 예금탭 공간 확보 -->
-            <div class="reserved-view active" id="right-deposit">
-              <div class="reserved-icon">⚜</div>
-              <div class="reserved-title">홀드 금고 예치처</div>
-              <div class="reserved-desc">
-                야를의 보증 아래 안전하게 보관되는 공식 예치금 금고입니다.
+            <!-- 4. 예금 탭: 예금액별 5단계 금고 뷰 -->
+            <div class="portrait-view active" id="right-deposit">
+              <div class="portrait-img-wrap">
+                <img id="vaultImg" class="vault-img" src="vault/vault-t1.jpg" alt="금고 이미지">
+              </div>
+              <div class="portrait-info">
+                <div class="portrait-dialogue" id="vaultQuote">"야를의 금고실 구석에 마련된 낡은 보관 궤짝입니다. 몇 닢 되지 않는 정착금이 거미줄 사이에 흩어져 있습니다."</div>
+                <div class="portrait-speaker" id="vaultSpeaker">1단계 · 먼지 쌓인 궤짝 (0 ~ 1,000 G)</div>
               </div>
             </div>
 
-            <!-- 4. 외상탭 공간 확보 -->
-            <div class="reserved-view" id="right-credit">
-              <div class="reserved-icon">⚖</div>
-              <div class="reserved-title">상인 외상 장부</div>
+            <!-- 4. 외상탭: 신용등급 5단계 잡화상(벨레소어) 초상화 및 대사 -->
+            <div class="portrait-view" id="right-credit">
+              <div class="portrait-img-wrap">
+                <img id="merchantImg" class="portrait-img" src="portraits/merchant-whiterun-t2.jpg" alt="잡화상 초상화">
+              </div>
+              <div class="portrait-info">
+                <div class="portrait-dialogue" id="merchantQuote">"쯧, 장부에 적어주긴 하겠네만 자네가 던전 구석에서 시체가 돼 봐! 수거 용역비 빼고 나면 시체에서 털어봤자 건질 게 없어서 내 손해가 막심하다고! 떠나기 전에 어디로 굴러들어갈 건지 꼭 말하고 가게. 그리고 숨이 끊어지기 직전엔 날 위해 주머니에 셉팀이나 가득 쑤셔 넣고 죽게!"</div>
+                <div class="portrait-speaker" id="merchantSpeaker">벨레소어 만물상</div>
+              </div>
+            </div>
+
+            <!-- 5. 담보 탭: 영지 공인 담보 감정소 안내 및 스펙 -->
+            <div class="reserved-view" id="right-collateral">
+              <div class="reserved-icon">⚖️</div>
+              <div class="reserved-title">영지 공인 담보 감정소</div>
               <div class="reserved-desc">
-                영지 내 상인 길드와 연계된 미납 외상 거래 채권 관리처입니다.
+                야를의 인장을 받은 공인 감정관이 상주하며<br>
+                귀중품 현물 수탁 · 인적 보증 공증 · 부동산 저당을<br>
+                법적 절차에 따라 총괄 관리합니다.
+              </div>
+              <div class="col-side-specs">
+                <div class="col-spec-item"><span class="col-spec-lbl">담보 인정 비율 (LTV)</span><span class="col-spec-val">최대 60%</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">현물 수탁 보관료</span><span class="col-spec-val">전액 면제</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">채무 불이행 조치</span><span class="col-spec-val">30일 후 압류 공매</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">공증 수수료</span><span class="col-spec-val">금고 전액 지원</span></div>
               </div>
             </div>
 
@@ -983,36 +1590,88 @@
     el.className = isWarning ? 'status warn' : 'status';
   }
 
-  var TABS = ['deposit', 'loan', 'credit', 'grade'];
+  var TABS = ['deposit', 'loan', 'credit', 'collateral', 'grade'];
 
   function showTab(name) {
     currentTab = name;
     for (var i = 0; i < TABS.length; i++) {
       var t = TABS[i];
-      document.getElementById('tab-' + t).className = (t === name) ? 'tab active' : 'tab';
-      document.getElementById('panel-' + t).className = (t === name) ? 'panel active' : 'panel';
+      var tabEl = document.getElementById('tab-' + t);
+      var panelEl = document.getElementById('panel-' + t);
+      if (tabEl) tabEl.className = (t === name) ? 'tab active' : 'tab';
+      if (panelEl) panelEl.className = (t === name) ? 'panel active' : 'panel';
     }
 
     // Right-side view switching:
-    // loan and grade tabs show the portrait & steward speech.
-    // deposit and credit tabs show their reserved slot view.
+    // loan and grade tabs show the steward portrait & speech.
+    // credit tab shows the merchant portrait & speech.
+    // collateral tab shows the appraiser reserved view.
+    // deposit tab shows its reserved slot view.
     var pView = document.getElementById('right-loan');
     var dView = document.getElementById('right-deposit');
     var cView = document.getElementById('right-credit');
+    var colView = document.getElementById('right-collateral');
+    var badgeEl = document.getElementById('stewardBadge');
 
     if (name === 'loan' || name === 'grade') {
       pView.className = 'portrait-view active';
-      dView.className = 'reserved-view';
-      cView.className = 'reserved-view';
+      dView.className = 'portrait-view';
+      cView.className = 'portrait-view';
+      if (colView) colView.className = 'reserved-view';
+      setText('stewardRoleTitle', state.hold + ' 궁정');
+      if (badgeEl) {
+        badgeEl.innerText = state.grade;
+        badgeEl.style.color = '';
+      }
     } else if (name === 'credit') {
       pView.className = 'portrait-view';
-      dView.className = 'reserved-view';
-      cView.className = 'reserved-view active';
+      dView.className = 'portrait-view';
+      cView.className = 'portrait-view active';
+      if (colView) colView.className = 'reserved-view';
+      setText('stewardRoleTitle', state.hold + ' 잡화상');
+      if (badgeEl) {
+        badgeEl.innerText = state.grade;
+        badgeEl.style.color = '';
+      }
+    } else if (name === 'collateral') {
+      pView.className = 'portrait-view';
+      dView.className = 'portrait-view';
+      cView.className = 'portrait-view';
+      if (colView) colView.className = 'reserved-view active';
+      setText('stewardRoleTitle', state.hold + ' 공증·감정원');
+      if (badgeEl) {
+        badgeEl.innerText = '공인 감정관';
+        badgeEl.style.color = '';
+      }
     } else { // deposit
       pView.className = 'portrait-view';
-      dView.className = 'reserved-view active';
-      cView.className = 'reserved-view';
+      dView.className = 'portrait-view active';
+      cView.className = 'portrait-view';
+      if (colView) colView.className = 'reserved-view';
+      setText('stewardRoleTitle', state.hold + ' 금고실');
+      var vInfo = getVaultStageInfo(state.balance);
+      if (badgeEl) {
+        badgeEl.innerText = vInfo.badge;
+        badgeEl.style.color = 'var(--gold)';
+      }
     }
+  }
+
+  var currentColSub = 'goods';
+  function showCollateralSub(cat) {
+    currentColSub = cat;
+    var cats = ['goods', 'guarantor', 'property'];
+    for (var i = 0; i < cats.length; i++) {
+      var c = cats[i];
+      var btn = document.getElementById('col-btn-' + c);
+      var view = document.getElementById('col-view-' + c);
+      if (btn) btn.className = (c === cat) ? 'col-nav-btn active' : 'col-nav-btn';
+      if (view) view.className = (c === cat) ? 'col-sub-view active' : 'col-sub-view';
+    }
+  }
+
+  function clickCollateralAction(msg) {
+    setStatus(msg, false);
   }
 
   /* The amount is chosen with buttons, never typed: Skyrim does not deliver keyboard
@@ -1215,12 +1874,22 @@
 
     setText('holdName', holdName);
     setText('holdEmblemName', holdName);
-    setText('stewardRoleTitle', holdName + ' 궁정');
+    if (currentTab === 'credit') {
+      setText('stewardRoleTitle', holdName + ' 잡화상');
+    } else {
+      setText('stewardRoleTitle', holdName + ' 궁정');
+    }
 
     var imgEl = document.getElementById('holdEmblemImg');
     if (imgEl) { imgEl.src = 'emblems/' + holdKey + '.png'; }
 
+    var artEl = document.getElementById('art');
+    if (artEl) { artEl.style.backgroundImage = "url('bg/" + holdKey + ".jpg')"; }
+
     setText('portraitSpeaker', STEWARDS[holdKey] || (holdName + ' 행정관'));
+    if (typeof updateMerchantPortrait === 'function') {
+      updateMerchantPortrait(state.grade, state.tier);
+    }
   }
 
   /* Portraits are named <holdKey>-t<tier>.jpg. Only Whiterun's set is drawn so far;
@@ -1301,6 +1970,121 @@
     }
   }
 
+  /* Merchants whose portraits have been drawn. Belethor (Whiterun) is provided;
+     onerror falls other holds back to Whiterun's Belethor set. */
+  var MERCHANTS = {
+    whiterun: { name: '벨레소어', shop: '벨레소어 만물상' }
+  };
+
+  var MERCHANT_QUOTES = {
+    '외지인': '"외상? 주머니에 진짜 셉팀 한 닢도 없나, 지금? …해주긴 해주겠다만 시체에서 수거할 일이 없게 만들어주게"',
+    '정체모를 용병': '"쯧, 장부에 적어주긴 하겠네만 자네가 던전 구석에서 시체가 돼 봐! 수거 용역비 빼고 나면 시체에서 털어봤자 건질 게 없어서 내 손해가 막심하다고! 떠나기 전에 어디로 굴러들어갈 건지 꼭 말하고 가게. 그리고 숨이 끊어지기 직전엔 날 위해 주머니에 셉팀이나 가득 쑤셔 넣고 죽게!"',
+    '영지의 종사': '"아이고, 우리 화이트런의 귀하신 종사(Thane) 나으리! 나으리 같은 분의 보증이라면 이 벨레소어의 가게 전부를 외상으로 드려도 아깝지 않지요! 자, 여기 장부입니다!"',
+    '신뢰받는 해결사': '"오, 마을의 궂은일들을 척척 해결해주시는 분이군요! 그 성실함 하나만큼은 확실한 현찰 보증서나 다름없지. 여기 외상 장부를 열어드릴 테니 필요한 걸 골라보게나."',
+    '스카이림의 영웅': '"스카이림을 구하는 위대한 영웅께서 제 누추한 만물상에 외상을 달아주시다니 영광입니다! 나으리의 이름 석 자가 제 외상 장부 최고의 자랑거리지요!"',
+    '요르바스크의 전사': '"요르바스크의 그 무서운 서클 전사분이 아니십니까! 그 묵직한 도끼만큼이나 든든한 신용이 어딨겠습니까? 외상이든 뭐든 편하게 가져가시고 상환만 제때 부탁드립니다!"',
+    '수석 마법학자': '"윈터홀드 대학의 고위 마법사시군요! 학파의 깊은 지혜와 마법처럼 가득 찬 금고를 믿고, 제 장부에 외상을 아낌없이 달아드리겠습니다. 필요한 연금술 재료라도 찾으십니까?"',
+    '훈장 수훈 장교': '"치열한 전선에서 공을 세우신 장교님을 뵙습니다! 군부의 거대한 보증이 뒤에 있으니, 외상 한도는 넉넉히 열어두겠습니다. 승전 기운을 제 가게에도 나누어 주십시오!"',
+    '탐리엘의 구원자': '"오오, 세상을 알두인의 이빨에서 구하신 구원자 나으리! 나으리가 원하신다면 제 여동생이라도, 아니 제 영혼이라도 장부에 적고 외상으로 드리지요! 부디 이 미천한 장사치의 성의를 받아주십시오!"',
+    '컴패니언의 인도자': '"이스그라모르의 의지를 잇는 인도자(Harbinger)시여! 요르바스크의 명예와 전우들이 장부를 보증하니, 제 만물상의 모든 물건을 외상으로 마음껏 거두어가소서!"',
+    '대학의 아크메이지': '"마법의 정점에 서신 위대한 아크메이지를 뵙습니다! 영지의 최고 지성이자 보물 가득한 대학의 수장이시니, 제 가게의 신용 장부는 이제 온전히 나으리의 것입니다."',
+    '전쟁 영웅 장군': '"스카이림에 전쟁의 종식을 가져다주신 최고 총사령관 각하! 군의 절대적인 신용 보증서가 제 장부에 꽂혔으니, 외상 한도는 무한이나 다름없습니다!"'
+  };
+
+  function updateMerchantPortrait(gradeName, tier) {
+    var quote = MERCHANT_QUOTES[gradeName] || MERCHANT_QUOTES['정체모를 용병'];
+
+    var imgEl = document.getElementById('merchantImg');
+    if (imgEl) {
+      imgEl.onerror = function () {
+        this.onerror = null;
+        this.src = 'portraits/merchant-whiterun-t' + tier + '.jpg';
+      };
+      imgEl.src = 'portraits/merchant-' + state.holdKey + '-t' + tier + '.jpg';
+    }
+
+    setText('merchantQuote', quote);
+
+    var mInfo = MERCHANTS[state.holdKey];
+    setText('merchantSpeaker', mInfo ? mInfo.shop : (state.hold + ' 잡화상'));
+  }
+
+  /* 예금액에 따른 5단계 금고 뷰 데이터 및 로직
+     1단계: 0 ~ 1,000 G
+     2단계: 1,001 ~ 5,000 G
+     3단계: 5,001 ~ 15,000 G
+     4단계: 15,001 ~ 30,000 G
+     5단계: 30,000 G ~ */
+  var VAULT_STAGES = {
+    1: {
+      tier: 1,
+      range: '0 ~ 1,000 G',
+      badge: '1단계 금고',
+      title: '1단계 · 먼지 쌓인 궤짝',
+      desc: '"야를의 금고실 구석에 마련된 낡은 보관 궤짝입니다. 몇 닢 되지 않는 정착금이 거미줄 사이에 흩어져 있습니다."'
+    },
+    2: {
+      tier: 2,
+      range: '1,001 ~ 5,000 G',
+      badge: '2단계 금고',
+      title: '2단계 · 이름 새겨진 보관함',
+      desc: '"모험가의 명패가 내걸린 철제 보강 보관함입니다. 두둑한 동전 주머니와 은식기들이 차곡차곡 쌓이고 있습니다."'
+    },
+    3: {
+      tier: 3,
+      range: '5,001 ~ 15,000 G',
+      badge: '3단계 금고',
+      title: '3단계 · 잠긴 금고실 궤짝',
+      desc: '"횃불이 밝히는 석조 보관실의 단단히 잠긴 금고 궤짝입니다. 영지 행정관의 엄격한 관리하에 안전하게 보관됩니다."'
+    },
+    4: {
+      tier: 4,
+      range: '15,001 ~ 30,000 G',
+      badge: '4단계 금고',
+      title: '4단계 · 중장갑 경비 금고고',
+      desc: '"야를의 정예 친위대가 창을 교차하여 지키는 대형 보물창고입니다. 쏟아지는 셉팀 금화와 금괴 더미가 위용을 자랑합니다."'
+    },
+    5: {
+      tier: 5,
+      range: '30,000 G 이상',
+      badge: '5단계 금고',
+      title: '5단계 · 마법 결계 특수 금고실',
+      desc: '"궁정 마법사의 영구적인 비전 결계와 정예 경비병들이 이중으로 수호하는 궁정 최고 등급의 황금 보물실입니다."'
+    }
+  };
+
+  function getVaultTier(bal) {
+    var n = Number(bal) || 0;
+    if (n >= 30000) return 5;
+    if (n >= 15001) return 4;
+    if (n >= 5001) return 3;
+    if (n >= 1001) return 2;
+    return 1;
+  }
+
+  function getVaultStageInfo(bal) {
+    var t = getVaultTier(bal);
+    return VAULT_STAGES[t] || VAULT_STAGES[1];
+  }
+
+  function updateVaultDisplay(bal) {
+    var info = getVaultStageInfo(bal);
+    var imgEl = document.getElementById('vaultImg');
+    if (imgEl) {
+      imgEl.src = 'vault/vault-t' + info.tier + '.jpg';
+    }
+    setText('vaultQuote', info.desc);
+    setText('vaultSpeaker', info.title + ' (' + info.range + ')');
+    setText('valVaultStage', info.badge + ' (' + info.range + ')');
+    if (currentTab === 'deposit') {
+      var badgeEl = document.getElementById('stewardBadge');
+      if (badgeEl) {
+        badgeEl.innerText = info.badge;
+        badgeEl.style.color = 'var(--gold)';
+      }
+    }
+  }
+
   /* How large a surface PrismaUI actually handed this page. There is no way to ask
      from the C++ side, and it decides whether soft text is a stretched surface or
      just small type. Sent on the first update rather than at load: bankAction is
@@ -1330,7 +2114,11 @@
         setText('valWallet', comma(data.wallet) + ' G');
         setText('valWallet2', comma(data.wallet) + ' G');
       }
-      if (data.balance !== undefined) { state.balance = data.balance; setText('valBalance', comma(data.balance) + ' G'); }
+      if (data.balance !== undefined) {
+        state.balance = data.balance;
+        setText('valBalance', comma(data.balance) + ' G');
+        updateVaultDisplay(state.balance);
+      }
       if (data.debt !== undefined) { state.debt = data.debt; setText('valDebt', comma(data.debt) + ' G'); }
       if (data.creditDebt !== undefined) { state.creditDebt = data.creditDebt; setText('valCreditDebt', comma(data.creditDebt) + ' G'); }
 
@@ -1359,10 +2147,11 @@
 
       if (data.paths !== undefined) { state.paths = data.paths; }
       if (data.pathList !== undefined) { state.pathList = data.pathList; }
-      if (data.grade !== undefined) {
-        state.grade = data.grade;
-        state.tier = (data.tier !== undefined) ? data.tier : state.tier;
+      if (data.grade !== undefined || data.tier !== undefined) {
+        if (data.grade !== undefined) { state.grade = data.grade; }
+        if (data.tier !== undefined) { state.tier = data.tier; }
         updateStewardPortrait(state.grade, state.tier);
+        updateMerchantPortrait(state.grade, state.tier);
       }
       setText('trackBonus', state.paths > 1
         ? ('달성 경로 ' + state.paths + '개 · 한도 +' + ((state.paths - 1) * 25) + '%')
@@ -1377,6 +2166,7 @@
           addEntry('creditLog', creditEntries, data.txType, data.txAmount || 0, state.creditDebt, '외상 잔액');
         } else {
           addEntry('depositLog', depositEntries, data.txType, data.txAmount || 0, state.balance, '예금');
+          updateVaultDisplay(state.balance);
         }
         setAmount(0);
       }
@@ -1394,6 +2184,8 @@
   // Initial state, replaced by the game's first update.
   updateHold('화이트런', 'whiterun');
   updateStewardPortrait('정체모를 용병', 2);
+  updateMerchantPortrait('정체모를 용병', 2);
+  updateVaultDisplay(state.balance);
   updateLoanNote();
 
   /* PrismaUI decides how large a surface this page gets and offers no way to ask

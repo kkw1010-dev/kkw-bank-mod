@@ -16,3 +16,8 @@ SKSE_Source/extern/
 # compilation only. Bethesda's, not ours to redistribute.
 Scripts/Import/
 Scripts/Vanilla/
+
+# Stale helper scripts
+copy_assets.ps1
+copy_assets.py
+crop_proventus.ps1
