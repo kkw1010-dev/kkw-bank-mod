@@ -49,7 +49,7 @@ Faction Property CWSons Auto
 WICourierScript Property Courier Auto
 GlobalVariable Property CreditSurcharge Auto
 
-; Test shortcut. DirectX scan code; 210 is Insert. Set to 0 to disable.
+; Test shortcut. DirectX scan code; 12 is the main-row minus key. Set to 0 to disable.
 GlobalVariable Property DebugHotkey Auto
 
 MiscObject Property Gold001 Auto
@@ -96,12 +96,19 @@ EndFunction
 ; config json, and SKSE Menu Framework would need ImGui integration in the plugin.
 Function RegisterDebugHotkey()
     ; Not named 'key': Key is an existing Skyrim script type and the name is reserved.
-    Int iKeyCode = 210
+    Int iKeyCode = 12
     If DebugHotkey
         iKeyCode = DebugHotkey.GetValueInt()
     EndIf
+    ; Key registrations live in the save, so changing the key without clearing the old
+    ; one leaves both registered and the mod keeps answering on the key nobody expects.
+    UnregisterForAllKeys()
     If iKeyCode > 0
         RegisterForKey(iKeyCode)
+        ; Says which key is actually live. If an older save baked in the previous value
+        ; of the global, the registered code will not match the one shipped in the
+        ; plugin, and this line is the only place that difference is visible.
+        Debug.Trace("BankPrism: 디버그 단축키 등록 스캔코드=" + iKeyCode)
     EndIf
 EndFunction
 

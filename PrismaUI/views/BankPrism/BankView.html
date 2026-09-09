@@ -1572,7 +1572,8 @@
     wallet: 0, balance: 0, debt: 0, creditDebt: 0,
     loanLimit: 0, creditLimit: 0, loanDaysLeft: 0, overdueDays: 0,
     hold: '화이트런', holdKey: 'whiterun', grade: '정체모를 용병', tier: 2,
-    paths: 1, pathList: ''
+    paths: 1, pathList: '',
+    received: false
   };
   var amount = 0;
   var loanEntries = [];
@@ -2014,7 +2015,7 @@
      2단계: 1,001 ~ 5,000 G
      3단계: 5,001 ~ 15,000 G
      4단계: 15,001 ~ 30,000 G
-     5단계: 30,000 G ~ */
+     5단계: 30,001 G ~ */
   var VAULT_STAGES = {
     1: {
       tier: 1,
@@ -2041,12 +2042,12 @@
       tier: 4,
       range: '15,001 ~ 30,000 G',
       badge: '4단계 금고',
-      title: '4단계 · 중장갑 경비 금고고',
+      title: '4단계 · 중장갑 경비 금고',
       desc: '"야를의 정예 친위대가 창을 교차하여 지키는 대형 보물창고입니다. 쏟아지는 셉팀 금화와 금괴 더미가 위용을 자랑합니다."'
     },
     5: {
       tier: 5,
-      range: '30,000 G 이상',
+      range: '30,001 G 이상',
       badge: '5단계 금고',
       title: '5단계 · 마법 결계 특수 금고실',
       desc: '"궁정 마법사의 영구적인 비전 결계와 정예 경비병들이 이중으로 수호하는 궁정 최고 등급의 황금 보물실입니다."'
@@ -2055,7 +2056,7 @@
 
   function getVaultTier(bal) {
     var n = Number(bal) || 0;
-    if (n >= 30000) return 5;
+    if (n >= 30001) return 5;
     if (n >= 15001) return 4;
     if (n >= 5001) return 3;
     if (n >= 1001) return 2;
@@ -2101,6 +2102,9 @@
   window.bankUpdateParams = function (jsonString) {
     try {
       var data = (typeof jsonString === 'string') ? JSON.parse(jsonString) : jsonString;
+
+      // First word from the game clears the "nothing has arrived" warning above.
+      if (!state.received) { state.received = true; setStatus('', false); }
 
       if (data.holdKey !== undefined || data.hold !== undefined) {
         state.hold = (data.hold !== undefined) ? data.hold : state.hold;
@@ -2187,6 +2191,18 @@
   updateMerchantPortrait('정체모를 용병', 2);
   updateVaultDisplay(state.balance);
   updateLoanNote();
+
+  /* None of the figures above came from the game. Printing them as "0 G" makes a
+     payload that never arrived look exactly like an empty purse, and that ambiguity
+     cost a whole session once: a saturated Papyrus VM left RefreshTx() suspended, so
+     UpdateParams() never ran, and the view sat there claiming a wallet of zero while
+     the player carried 35,000. Dashes make the silence say what it is. */
+  var UNCONFIRMED_FIELDS = ['valWallet', 'valWallet2', 'valBalance', 'valDebt',
+                            'valCreditDebt', 'valLoanLimit', 'valCreditLimit'];
+  for (var ui = 0; ui < UNCONFIRMED_FIELDS.length; ui++) {
+    setText(UNCONFIRMED_FIELDS[ui], '— G');
+  }
+  setStatus('게임에서 아직 정보가 오지 않았습니다.', true);
 
   /* PrismaUI decides how large a surface this page gets and offers no way to ask
      from the C++ side, so the page reports it instead. If the surface is narrower

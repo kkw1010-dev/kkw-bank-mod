@@ -1087,7 +1087,7 @@ namespace EspGenerator
             // needed and the debt cannot run away on its own.
             var surcharge = NewGlobal(IdSurcharge, "MerchantCreditSurchargePercent", 20f);
             // 210 = DirectX scan code for Insert; 0 disables the test shortcut.
-            var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 210f);
+            var debugHotkey = NewGlobal(IdDebugHotkey, "BankPrismDebugHotkey", 12f);
 
             // Each hold's dunning letter. Only Whiterun's is written so far; the others
             // fall back to a short generic text, so adding one later is a single case.
