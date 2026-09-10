@@ -850,6 +850,62 @@ namespace EspGenerator
                 return;
             }
 
+            // Every faction an NPC belongs to, with rank, and the crime faction the engine
+            // hands back from GetCrimeFaction(). Membership and the assigned crime faction
+            // are different fields, and a dialogue condition can only see membership - so
+            // a hold-restricting condition has to be checked here, not assumed.
+            if (args.Length > 1 && args[0] == "factions")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var byKey = esm.Factions.ToDictionary(f => f.FormKey, f => f.EditorID ?? "");
+                foreach (var npc in esm.Npcs)
+                {
+                    var edid = npc.EditorID ?? "";
+                    var name = npc.Name?.String ?? "";
+                    if (edid.IndexOf(args[1], StringComparison.OrdinalIgnoreCase) < 0 &&
+                        name.IndexOf(args[1], StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var crime = npc.CrimeFaction.FormKeyNullable;
+                    var crimeName = crime is FormKey ck && byKey.TryGetValue(ck, out var cn) ? cn : "(none)";
+                    Console.WriteLine($"NPC {npc.FormKey}  EDID={edid}  Name={name}  crimeFaction={crimeName}  template={npc.Template.FormKeyNullable}");
+                    foreach (var fr in npc.Factions)
+                    {
+                        var fk = fr.Faction.FormKeyNullable;
+                        var fn = fk is FormKey k && byKey.TryGetValue(k, out var n) ? n : fk?.ToString() ?? "?";
+                        Console.WriteLine($"    member rank={fr.Rank,-3} {fn}");
+                    }
+                }
+                return;
+            }
+
+            // NPCs that belong to every faction named (comma separated EditorIDs), so an AND
+            // of GetInFaction conditions can be checked against who it would really reach.
+            if (args.Length > 1 && args[0] == "members")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var wanted = args[1].Split(',', StringSplitOptions.RemoveEmptyEntries);
+                var keys = wanted
+                    .Select(w => esm.Factions.FirstOrDefault(f => string.Equals(f.EditorID, w, StringComparison.OrdinalIgnoreCase))?.FormKey)
+                    .ToArray();
+                for (int i = 0; i < wanted.Length; i++)
+                    Console.WriteLine($"  faction {wanted[i]} -> {(keys[i]?.ToString() ?? "NOT FOUND")}");
+                if (keys.Any(k => k == null)) return;
+                var byKey = esm.Factions.ToDictionary(f => f.FormKey, f => f.EditorID ?? "");
+                int count = 0;
+                foreach (var npc in esm.Npcs)
+                {
+                    var mine = npc.Factions.Select(fr => fr.Faction.FormKeyNullable).ToHashSet();
+                    if (!keys.All(k => mine.Contains(k))) continue;
+                    var crime = npc.CrimeFaction.FormKeyNullable;
+                    var crimeName = crime is FormKey ck && byKey.TryGetValue(ck, out var cn) ? cn : "(none)";
+                    Console.WriteLine($"  {npc.FormKey.ID:X6} {npc.EditorID,-28} {npc.Name?.String,-24} crimeFaction={crimeName}");
+                    count++;
+                }
+                Console.WriteLine($"  {count} NPC(s)");
+                return;
+            }
+
             if (args.Length > 0 && args[0] == "vendors")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -1013,6 +1069,20 @@ namespace EspGenerator
                 ("Winterhold", "윈터홀드",   0x02816F),
             };
 
+            // Holds the mod currently serves. Only these are offered the steward and
+            // general-store topics, and the Papyrus side refuses the rest in
+            // HoldIsEnabled(). Everything else is still generated - globals, letters,
+            // array slots - so switching a hold back on is its name here plus its index
+            // there, with no change to the save format. The build checks both agree.
+            var enabledHolds = new HashSet<string> { "Whiterun" };
+            var enabledCrimeFactions = holds.Where(h => enabledHolds.Contains(h.name))
+                                            .Select(h => Vanilla(h.crimeFaction)).ToArray();
+            var enabledHoldIndexes = holds.Select((h, i) => (h, i))
+                                          .Where(x => enabledHolds.Contains(x.h.name))
+                                          .Select(x => x.i).ToArray();
+            if (enabledCrimeFactions.Length != enabledHolds.Count)
+                throw new InvalidOperationException("enabledHolds names a hold that is not in the hold table");
+
             // ---- 1. Globals ----------------------------------------------------------
             // Global is abstract in Mutagen; GlobalFloat must be constructed directly.
             GlobalFloat NewGlobal(uint id, string edid, float value = 0f)
@@ -1111,13 +1181,13 @@ namespace EspGenerator
             {
                 ["화이트런"] = new string[DunningDays]
                 {
-                    "화이트런 영지 행정관\n\n드래곤즈리치 금고에서 알립니다. 귀하의 대출 상환 기한이 지났음을 서면으로 안내해 드립니다. 제국과 스톰클로크의 대치 속에서 화이트런의 전시 재정은 한 푼도 놀릴 수 없는 형편입니다. 가까운 시일 안에 드래곤즈리치를 방문하시어 장부를 정산해 주시기 바랍니다.",
-                    "화이트런 영지 행정관\n\n어제 보내드린 서신을 확인하셨는지요. 드래곤즈리치의 장부는 매일 일몰 전 정산되며, 귀하의 연체 기록이 여전히 남아 있습니다. 스카이림의 중심지인 화이트런의 재정은 시국의 혼란으로 매우 긴박합니다. 오늘 중으로 청지기 집무실을 찾아주십시오.",
-                    "화이트런 영지 행정관\n\n사흘째 상환이 지연되고 있습니다. 영지 금고의 규정에 따라 일일 이자가 장부에 추가로 기록되기 시작했습니다. 불필요한 금화 지출이 늘어나기 전에, 드래곤즈리치로 오셔서 대출금을 청산하시길 강력히 권고합니다.",
+                    "화이트런 영지 행정관\n\n드래곤스리치 금고에서 알립니다. 귀하의 대출 상환 기한이 지났음을 서면으로 안내해 드립니다. 제국과 스톰클로크의 대치 속에서 화이트런의 전시 재정은 한 푼도 놀릴 수 없는 형편입니다. 가까운 시일 안에 드래곤스리치를 방문하시어 장부를 정산해 주시기 바랍니다.",
+                    "화이트런 영지 행정관\n\n어제 보내드린 서신을 확인하셨는지요. 드래곤스리치의 장부는 매일 일몰 전 정산되며, 귀하의 연체 기록이 여전히 남아 있습니다. 스카이림의 중심지인 화이트런의 재정은 시국의 혼란으로 매우 긴박합니다. 오늘 중으로 행정관 집무실을 찾아주십시오.",
+                    "화이트런 영지 행정관\n\n사흘째 상환이 지연되고 있습니다. 드래곤스리치 금고의 규정에 따라 일일 이자가 장부에 추가로 기록되기 시작했습니다. 불필요한 금화 지출이 늘어나기 전에, 드래곤스리치로 오셔서 대출금을 청산하시길 강력히 권고합니다.",
                     "화이트런 영지 행정관\n\n사흘이 넘도록 소식이 없으시군요. 영지의 경비대 유지비와 성벽 보수 예산이 귀하의 채무로 인해 묶여 있습니다. 야를께서도 영지 재정 보고를 받으시며 장부의 이름을 유심히 살피셨습니다. 더 이상 일을 지체하지 마십시오.",
                     "화이트런 영지 행정관\n\n닷새째입니다. 귀하의 연체는 이제 단순한 건망증으로 보기 어렵습니다. 야를의 공공 금융 시스템은 모험가의 개인 자금줄이 아닙니다. 야를의 인내심을 시험하지 마시고, 즉시 방문하여 정산해 주십시오.",
                     "화이트런 영지 행정관\n\n엿새째 상환이 이루어지지 않았습니다. 이 서신이 전달된 후에도 정산이 되지 않는다면, 영지 법률에 따라 법적 채무 불이행 절차가 착수될 것입니다. 영지의 명예를 생각하시어 오늘 안으로 방문하십시오.",
-                    "화이트런 영지 행정관\n\n최후통첩입니다. 일주일의 기한이 완전히 만료되었습니다. 야를의 인내에도 끝이 있으며, 야를의 금고는 더 이상 대기하지 않습니다. 즉시 채무를 완납하지 않을 경우, 신용 강등 및 강력한 추심 조치가 집행될 것입니다."
+                    "화이트런 영지 행정관\n\n최후통첩입니다. 일주일의 기한이 완전히 만료되었습니다. 야를의 인내에도 끝이 있으며, 드래곤스리치 금고는 더 이상 대기하지 않습니다. 즉시 채무를 완납하지 않을 경우, 신용 강등 및 강력한 추심 조치가 집행될 것입니다."
                 },
                 ["하핑가"] = new string[DunningDays]
                 {
@@ -1376,7 +1446,7 @@ namespace EspGenerator
             // Every vanilla player topic belongs to a top-level DialogBranch. A topic
             // without one is never offered in the dialogue menu at all.
             void AddTopic(string id, uint topicId, uint branchId, uint infoId,
-                          string prompt, string response, FormKey[] factions, string fragment)
+                          string prompt, string response, FormKey[] required, FormKey[] anyOf, string fragment)
             {
                 var topic = new DialogTopic(Id(topicId), SkyrimRelease.SkyrimSE);
                 mod.DialogTopics.Add(topic);
@@ -1418,8 +1488,7 @@ namespace EspGenerator
                 // by four that all carry OR. Clearing the flag on the final clause instead
                 // makes the engine read it as "(any of the rest) AND (that one)", which no
                 // actor can satisfy, and the topic silently reaches nobody.
-                var orGroup = factions.Length > 1;
-                foreach (var faction in factions)
+                void AddInFaction(FormKey faction, bool or)
                 {
                     var inFaction = new GetInFactionConditionData();
                     inFaction.Faction.Link.SetTo(faction);
@@ -1428,9 +1497,15 @@ namespace EspGenerator
                         CompareOperator = CompareOperator.EqualTo,
                         ComparisonValue = 1f,
                         Data = inFaction,
-                        Flags = orGroup ? Condition.Flag.OR : default
+                        Flags = or ? Condition.Flag.OR : default
                     });
                 }
+
+                // Required clauses first, each ANDed, then the alternatives as a single
+                // OR group - the same shape as vanilla 000E3D.
+                foreach (var faction in required) AddInFaction(faction, false);
+                var orGroup = anyOf.Length > 1;
+                foreach (var faction in anyOf) AddInFaction(faction, orGroup);
 
                 var entry = new ScriptEntry { Name = fragment, Flags = ScriptEntry.Flag.Local };
                 entry.Properties.Add(new ScriptObjectProperty
@@ -1455,34 +1530,42 @@ namespace EspGenerator
                 topic.Responses.Add(info);
             }
 
-            // One faction covers every hold steward, including the wartime replacements.
+            // JobStewardFaction covers every hold steward, wartime replacements included;
+            // membership of an enabled hold's crime faction narrows that to the holds the
+            // mod serves. `dotnet run -- members JobStewardFaction,CrimeFactionWhiterun`
+            // says who that is: Proventus Avenicci and nobody else.
             AddTopic("BankPrismBank", IdBankTopic, IdBankBranch, IdBankInfo,
                      "은행 업무를 보고 싶습니다.",
                      "물론입니다. 어떤 업무를 도와드릴까요?",
-                     new[] { Vanilla(0x050922) }, "BankPrismDialogueFragment");
+                     new[] { Vanilla(0x050922) }, enabledCrimeFactions, "BankPrismDialogueFragment");
 
             // Standalone general stores with their own premises. Blacksmiths, alchemists,
             // innkeepers, market stalls and the Khajiit caravans are deliberately absent:
             // Eorlund extending credit to the Companions' Harbinger reads wrong. Faction
             // ids were read out of Skyrim.esm rather than taken on trust - of the nine NPC
             // ids supplied with this list, eight were wrong.
-            var generalStores = new[]
+            var generalStores = new (string hold, FormKey faction)[]
             {
-                Vanilla(0x09CAF5), // ServicesWhiterunBelethorsGoods    - Belethor
-                Vanilla(0x05A665), // ServicesRiverwoodRiverwoodTrader  - Lucan Valerius
-                Vanilla(0x0A6C02), // ServicesSolitudeBitsAndPieces     - Sayma
-                Vanilla(0x0A31C5), // ServicesRiftenPawnedPrawn         - Bersi Honey-Hand
-                Vanilla(0x094375), // ServicesMarkarthArnleifandSons    - Lisbet
-                Vanilla(0x0A3F12), // ServicesWindhelmRevynSadri        - Revyn Sadri
-                Vanilla(0x09DA62), // ServicesWinterholdBirna           - Birna
-                Vanilla(0x0A6BFE), // ServicesFalkreathGrayPineGoods    - Solaf
-                Vanilla(0x09DA5B), // ServicesMorthalLami               - Lami
+                ("Whiterun",   Vanilla(0x09CAF5)), // ServicesWhiterunBelethorsGoods    - Belethor
+                ("Whiterun",   Vanilla(0x05A665)), // ServicesRiverwoodRiverwoodTrader  - Lucan Valerius
+                ("Haafingar",  Vanilla(0x0A6C02)), // ServicesSolitudeBitsAndPieces     - Sayma
+                ("Rift",       Vanilla(0x0A31C5)), // ServicesRiftenPawnedPrawn         - Bersi Honey-Hand
+                ("Reach",      Vanilla(0x094375)), // ServicesMarkarthArnleifandSons    - Lisbet
+                ("Eastmarch",  Vanilla(0x0A3F12)), // ServicesWindhelmRevynSadri        - Revyn Sadri
+                ("Winterhold", Vanilla(0x09DA62)), // ServicesWinterholdBirna           - Birna
+                ("Falkreath",  Vanilla(0x0A6BFE)), // ServicesFalkreathGrayPineGoods    - Solaf
+                ("Hjaalmarch", Vanilla(0x09DA5B)), // ServicesMorthalLami               - Lami
             };
+
+            // Hold tags as read by `dotnet run -- credit`, which prints each store's
+            // staff with the crime faction the engine assigns them.
+            var enabledStores = generalStores.Where(st => enabledHolds.Contains(st.hold))
+                                             .Select(st => st.faction).ToArray();
 
             AddTopic("BankPrismCredit", IdCreditTopic, IdCreditBranch, IdCreditInfo,
                      "외상으로 거래하고 싶습니다.",
                      "장부에 달아 두지요. 갚는 것만 잊지 마시오.",
-                     generalStores, "BankPrismCreditFragment");
+                     Array.Empty<FormKey>(), enabledStores, "BankPrismCreditFragment");
 
 
             // ---- 4. Write ------------------------------------------------------------
@@ -1552,7 +1635,92 @@ namespace EspGenerator
             }
 
             AssertDialogueCanWork(check);
+            AssertOnlyEnabledHoldsReached(check, enabledHolds,
+                holds.Select(h => (h.name, Vanilla(h.crimeFaction))).ToArray(),
+                enabledHoldIndexes, Path.GetDirectoryName(outputPath)!);
             AssertFontCanDrawIt(outputPath);
+        }
+
+        // The other eight holds are hidden by dialogue condition, and a condition that
+        // reaches the wrong people fails as quietly as one that reaches nobody. So the
+        // build works out from Skyrim.esm exactly which NPCs each topic is offered to,
+        // prints them, and refuses the build if any belongs to a hold that is switched
+        // off, or if a topic reaches no one. It also reads HoldIsEnabled() out of the
+        // Papyrus source, because the two lists live in different languages and nothing
+        // else would notice them drift apart.
+        static void AssertOnlyEnabledHoldsReached(ISkyrimModGetter mod, HashSet<string> enabledHolds,
+            (string name, FormKey crime)[] holds, int[] enabledIndexes, string repoRoot)
+        {
+            var problems = new List<string>();
+            using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+            var crimeToHold = holds.ToDictionary(h => h.crime, h => h.name);
+
+            Console.WriteLine();
+            Console.WriteLine("--- 대화문 도달 범위 (Skyrim.esm 기준) ---");
+            foreach (var topic in mod.DialogTopics)
+            foreach (var info in topic.Responses)
+            {
+                // Plain clauses are each ANDed and OR-flagged clauses form one group,
+                // which is how the engine read the OR-flag bug recorded in TASK.md.
+                var plain = new List<FormKey>();
+                var anyOf = new List<FormKey>();
+                foreach (var c in info.Conditions)
+                {
+                    if (c.Data is not IGetInFactionConditionDataGetter g ||
+                        g.Faction.Link.FormKeyNullable is not FormKey fk)
+                    {
+                        problems.Add($"{info.EditorID}: GetInFaction 이외의 조건이 있어 도달 범위를 계산할 수 없다");
+                        continue;
+                    }
+                    if (c.Flags.HasFlag(Condition.Flag.OR)) anyOf.Add(fk); else plain.Add(fk);
+                }
+
+                var reached = new List<string>();
+                foreach (var npc in esm.Npcs)
+                {
+                    var mine = npc.Factions.Select(fr => fr.Faction.FormKeyNullable).OfType<FormKey>().ToHashSet();
+                    if (!plain.All(mine.Contains)) continue;
+                    if (anyOf.Count > 0 && !anyOf.Any(mine.Contains)) continue;
+                    var crime = npc.CrimeFaction.FormKeyNullable;
+                    string hold = crime is FormKey ck && crimeToHold.TryGetValue(ck, out var hn) ? hn : "(홀드 없음)";
+                    reached.Add($"{npc.EditorID}={hold}");
+                    if (!enabledHolds.Contains(hold))
+                        problems.Add($"{info.EditorID}: 꺼진 홀드의 NPC에게 뜬다 - {npc.EditorID} ({hold})");
+                }
+                Console.WriteLine($"  {info.EditorID}: {reached.Count}명 [{string.Join(", ", reached)}]");
+                if (reached.Count == 0)
+                    problems.Add($"{info.EditorID}: 아무에게도 뜨지 않는다");
+            }
+
+            var psc = Path.Combine(repoRoot, "Scripts", "Source", "BankPrismController.psc");
+            var src = File.ReadAllText(psc);
+            int start = src.IndexOf("Bool Function HoldIsEnabled(", StringComparison.Ordinal);
+            int end = start < 0 ? -1 : src.IndexOf("EndFunction", start, StringComparison.Ordinal);
+            if (start < 0 || end < 0)
+            {
+                problems.Add("BankPrismController.psc에 HoldIsEnabled()가 없다");
+            }
+            else
+            {
+                var body = src.Substring(start, end - start);
+                var gated = System.Text.RegularExpressions.Regex.Matches(body, @"aiHold\s*==\s*(\d+)")
+                    .Select(m => int.Parse(m.Groups[1].Value)).OrderBy(i => i).ToArray();
+                var wanted = enabledIndexes.OrderBy(i => i).ToArray();
+                Console.WriteLine($"  HoldIsEnabled(): [{string.Join(", ", gated)}]   enabledHolds: [{string.Join(", ", wanted)}]");
+                if (!gated.SequenceEqual(wanted))
+                    problems.Add($"Papyrus HoldIsEnabled() [{string.Join(", ", gated)}] 와 생성기 enabledHolds [{string.Join(", ", wanted)}] 가 다르다");
+            }
+
+            Console.WriteLine();
+            if (problems.Count == 0)
+            {
+                Console.WriteLine("--- 홀드 제한 검사: 통과 ---");
+                return;
+            }
+            Console.WriteLine("--- 홀드 제한 검사: 실패 ---");
+            foreach (var pr in problems) Console.WriteLine("  " + pr);
+            Environment.ExitCode = 1;
         }
 
         // Everything here is a condition under which the game shows no topic at all,

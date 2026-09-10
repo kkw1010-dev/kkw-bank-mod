@@ -88,6 +88,7 @@ Function ReportState()
     Trace("bindings: crimeFactions=" + (HoldCrimeFactions != None)         + " gold=" + (Gold001 != None) + " courier=" + (Courier != None)         + " thaneTracker=" + (ThaneTracker != None) + " civilWar=" + (CivilWar != None)         + " college=" + (CollegeFaction != None))
     If HoldsReady()
         Trace("accounts: " + BankBalances.Length + " holds bound")
+        Trace("enabled holds: " + EnabledHoldList())
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -116,6 +117,11 @@ EndFunction
 Event OnKeyDown(Int aiKeyCode)
     If bMenuOpen || Utility.IsInMenuMode()
         Return
+    EndIf
+    ; The shortcut reopens whichever hold was last used, which may since have been
+    ; switched off; fall back to the first hold still served.
+    If !HoldIsEnabled(CurrentHold)
+        CurrentHold = FirstEnabledHold()
     EndIf
     ; The shortcut doubles as the health check: it says out loud that the quest is
     ; alive and writes the full state to the log. If pressing it does nothing at
@@ -222,6 +228,40 @@ Bool Function HoldIsValid(Int aiHold)
     Return aiHold < BankBalances.Length
 EndFunction
 
+; Holds the mod currently serves. The rest keep every account, letter and array slot;
+; only the doors are shut - no topic is offered there, and these gates refuse whatever
+; still arrives. Must name the same holds as enabledHolds in EspGenerator/Program.cs:
+; the generator reads this function and fails the build if the two disagree.
+Bool Function HoldIsEnabled(Int aiHold)
+    Return aiHold == 0
+EndFunction
+
+Int Function FirstEnabledHold()
+    Int i = 0
+    While HoldIsValid(i)
+        If HoldIsEnabled(i)
+            Return i
+        EndIf
+        i += 1
+    EndWhile
+    Return -1
+EndFunction
+
+String Function EnabledHoldList()
+    String names = ""
+    Int i = 0
+    While HoldIsValid(i)
+        If HoldIsEnabled(i)
+            If names != ""
+                names += ", "
+            EndIf
+            names += GetHoldName(i)
+        EndIf
+        i += 1
+    EndWhile
+    Return names
+EndFunction
+
 Int Function GetGlobalInt(GlobalVariable akGlobal)
     If akGlobal
         Return akGlobal.GetValueInt()
@@ -236,6 +276,11 @@ EndFunction
 Function OpenBankMenu(Actor akSpeaker)
     Int hold = ResolveHold(akSpeaker)
     If !HoldIsValid(hold)
+        Debug.Notification("이 곳에서는 은행 업무를 볼 수 없습니다.")
+        Return
+    EndIf
+    If !HoldIsEnabled(hold)
+        Trace("bank refused: " + GetHoldName(hold) + " is switched off")
         Debug.Notification("이 곳에서는 은행 업무를 볼 수 없습니다.")
         Return
     EndIf
@@ -408,6 +453,11 @@ Function BeginCreditBarter(Actor akMerchant)
 
     Int hold = ResolveHold(akMerchant)
     If !HoldIsValid(hold)
+        Debug.Notification("이 상인에게는 외상을 달 수 없습니다.")
+        Return
+    EndIf
+    If !HoldIsEnabled(hold)
+        Trace("credit refused: " + GetHoldName(hold) + " is switched off")
         Debug.Notification("이 상인에게는 외상을 달 수 없습니다.")
         Return
     EndIf
@@ -923,7 +973,7 @@ Bool Function AnyLoanOutstanding()
     EndIf
     Int i = 0
     While i < BankDebts.Length
-        If BankDebts[i].GetValueInt() > 0
+        If HoldIsEnabled(i) && BankDebts[i].GetValueInt() > 0
             Return True
         EndIf
         i += 1
@@ -1112,10 +1162,14 @@ Event OnUpdateGameTime()
     Int overdueHolds = 0
     Int i = 0
     While i < BankDebts.Length
-        AccrueOverdue(i)
-        If IsOverdue(i)
-            SendDunningLetter(i)
-            overdueHolds += 1
+        ; A switched-off hold is frozen, not forgiven: its ledger is left exactly as it
+        ; is, but it neither accrues nor sends letters the player could not answer.
+        If HoldIsEnabled(i)
+            AccrueOverdue(i)
+            If IsOverdue(i)
+                SendDunningLetter(i)
+                overdueHolds += 1
+            EndIf
         EndIf
         i += 1
     EndWhile

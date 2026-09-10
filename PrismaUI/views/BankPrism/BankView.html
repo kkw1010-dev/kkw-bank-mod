@@ -931,7 +931,7 @@
     <div class="topbar">
       <div class="brand">
         <span class="hold" id="holdName">화이트런</span>
-        <span class="sub">야를의 금고 · 행정관 장부</span>
+        <span class="sub" id="holdSub">드래곤스리치 금고 · 행정관 장부</span>
       </div>
       <div class="meters">
         <div class="meter">
@@ -1134,7 +1134,7 @@
                   <span>위탁 번호 <b>WH-GEM-014</b></span>
                 </div>
                 <div class="col-card-desc">
-                  화이트런 궁정 보석 세공사의 정품 각인이 완료된 최고 순도 무결점 다이아몬드입니다. 영주 금고 특수 격실에 보관 중입니다.
+                  화이트런 궁정 보석 세공사의 정품 각인이 완료된 최고 순도 무결점 다이아몬드입니다. 드래곤스리치 금고 특수 격실에 보관 중입니다.
                 </div>
                 <div class="col-action-row">
                   <button class="col-btn secondary" onclick="clickCollateralAction('완벽한 다이아몬드 위탁 보관증(WH-GEM-014)이 정상 확인되었습니다.')">보관증 확인</button>
@@ -1286,7 +1286,7 @@
                   <span>등기 <b>화이트런 제1호</b></span>
                 </div>
                 <div class="col-card-desc">
-                  화이트런 성문 인근 복층 가옥 (연금술 실험실 및 가구 증축 완료). 화이트런 영주실 금고에 제1순위 근저당권이 설정되어 있습니다.
+                  화이트런 성문 인근 복층 가옥 (연금술 실험실 및 가구 증축 완료). 드래곤스리치 금고에 제1순위 근저당권이 설정되어 있습니다.
                 </div>
                 <div class="grade-warning-badge" style="margin-top: 4px; margin-bottom: 8px;">
                   ⚠️ <b>채무 불이행 특약:</b> 대출 만기 후 연체 30일 초과 시, 행정관 프로벤투스의 집행 아래 즉시 강제 경매 공매 처분 공고가 발령됩니다.
@@ -1496,7 +1496,7 @@
         <!-- 3 & 4. 확장칸 하단: 행정관 초상화(대출/신용등급 탭) / 공간 확보 슬롯(예금·외상 탭) -->
         <div class="steward-card">
           <div class="steward-header">
-            <span class="steward-title" id="stewardRoleTitle">화이트런 궁정</span>
+            <span class="steward-title" id="stewardRoleTitle">드래곤스리치 금고실</span>
             <span class="steward-grade-badge" id="stewardBadge">정체모를 용병</span>
           </div>
 
@@ -1519,7 +1519,7 @@
                 <img id="vaultImg" class="vault-img" src="vault/vault-t1.jpg" alt="금고 이미지">
               </div>
               <div class="portrait-info">
-                <div class="portrait-dialogue" id="vaultQuote">"야를의 금고실 구석에 마련된 낡은 보관 궤짝입니다. 몇 닢 되지 않는 정착금이 거미줄 사이에 흩어져 있습니다."</div>
+                <div class="portrait-dialogue" id="vaultQuote">"드래곤스리치 금고실 구석에 마련된 낡은 보관 궤짝입니다. 몇 닢 되지 않는 정착금이 거미줄 사이에 흩어져 있습니다."</div>
                 <div class="portrait-speaker" id="vaultSpeaker">1단계 · 먼지 쌓인 궤짝 (0 ~ 1,000 G)</div>
               </div>
             </div>
@@ -1619,7 +1619,7 @@
       dView.className = 'portrait-view';
       cView.className = 'portrait-view';
       if (colView) colView.className = 'reserved-view';
-      setText('stewardRoleTitle', state.hold + ' 궁정');
+      setText('stewardRoleTitle', seatText('court', state.hold + ' 궁정'));
       if (badgeEl) {
         badgeEl.innerText = state.grade;
         badgeEl.style.color = '';
@@ -1649,7 +1649,7 @@
       dView.className = 'portrait-view active';
       cView.className = 'portrait-view';
       if (colView) colView.className = 'reserved-view';
-      setText('stewardRoleTitle', state.hold + ' 금고실');
+      setText('stewardRoleTitle', seatText('vaultRoom', state.hold + ' 금고실'));
       var vInfo = getVaultStageInfo(state.balance);
       if (badgeEl) {
         badgeEl.innerText = vInfo.badge;
@@ -1769,7 +1769,7 @@
         + '불어나고, 행정관이 사람을 보냅니다.';
       el.className = 'note overdue';
     } else if (state.loanLimit <= 0) {
-      el.innerText = '야를의 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.';
+      el.innerText = seatText('loanLocked', '야를의 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.');
       el.className = 'note';
     } else {
       el.innerText = '야를의 호의에는 서명할 때 한 번 가산이 붙습니다. 기한을 넘기면 날마다 더해집니다.';
@@ -1791,6 +1791,32 @@
   /* Stewards whose portraits have been drawn. Any other hold borrows Whiterun's
      art and is addressed by office rather than by name. */
   var STEWARDS = { whiterun: '프로벤투스 아베니치' };
+
+  /* How a hold names the Jarl's seat. The shared strings speak of "야를의 금고" and
+     "궁정" so any hold reads correctly; a hold listed here names its own seat instead.
+     People and offices - 야를께서, 영주 발그루프, 궁정 마법사 - are not places and stay
+     as they are. Only the hold the mod currently serves has an entry. */
+  var SEAT_TEXT = {
+    whiterun: {
+      sub: '드래곤스리치 금고 · 행정관 장부',
+      court: '드래곤스리치',
+      vaultRoom: '드래곤스리치 금고실',
+      loanLocked: '드래곤스리치 금고는 이름 없는 칼잡이에게 열리지 않습니다. 행적을 쌓으십시오.',
+      vault: {
+        1: '"드래곤스리치 금고실 구석에 마련된 낡은 보관 궤짝입니다. 몇 닢 되지 않는 정착금이 거미줄 사이에 흩어져 있습니다."',
+        5: '"궁정 마법사의 영구적인 비전 결계와 정예 경비병들이 이중으로 수호하는 드래곤스리치 최고 등급의 황금 보물실입니다."'
+      },
+      grade: {
+        '요르바스크의 전사': '"요르바스크의 명예로운 동료이자 용맹한 전사여. 그 강인한 기백은 드래곤스리치 금고보다도 든든한 신용 보증서라네."',
+        '탐리엘의 구원자': '"오, 탐리엘의 구원자이시여! 드래곤스리치 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."'
+      }
+    }
+  };
+
+  function seatText(key, fallback) {
+    var t = SEAT_TEXT[state.holdKey];
+    return (t && t[key]) ? t[key] : fallback;
+  }
 
   /* Keyed by the grade string the game sends. GetCreditGrade() in
      BankPrismController.psc returns exactly these, one per unlock path, and the
@@ -1875,10 +1901,17 @@
 
     setText('holdName', holdName);
     setText('holdEmblemName', holdName);
+    setText('holdSub', seatText('sub', '야를의 금고 · 행정관 장부'));
+    // Same titles as showTab(): an update used to put "궁정" over the deposit tab,
+    // which is the tab the view opens on.
     if (currentTab === 'credit') {
       setText('stewardRoleTitle', holdName + ' 잡화상');
+    } else if (currentTab === 'deposit') {
+      setText('stewardRoleTitle', seatText('vaultRoom', holdName + ' 금고실'));
+    } else if (currentTab === 'collateral') {
+      setText('stewardRoleTitle', holdName + ' 공증·감정원');
     } else {
-      setText('stewardRoleTitle', holdName + ' 궁정');
+      setText('stewardRoleTitle', seatText('court', holdName + ' 궁정'));
     }
 
     var imgEl = document.getElementById('holdEmblemImg');
@@ -1908,7 +1941,8 @@
       imgEl.src = 'portraits/' + state.holdKey + '-t' + tier + '.jpg';
     }
 
-    setText('portraitQuote', info.quote);
+    var seatGrade = (SEAT_TEXT[state.holdKey] || {}).grade || {};
+    setText('portraitQuote', seatGrade[gradeName] || info.quote);
 
     var badgeEl = document.getElementById('stewardBadge');
     if (badgeEl) {
@@ -2074,7 +2108,8 @@
     if (imgEl) {
       imgEl.src = 'vault/vault-t' + info.tier + '.jpg';
     }
-    setText('vaultQuote', info.desc);
+    var seatVault = (SEAT_TEXT[state.holdKey] || {}).vault || {};
+    setText('vaultQuote', seatVault[info.tier] || info.desc);
     setText('vaultSpeaker', info.title + ' (' + info.range + ')');
     setText('valVaultStage', info.badge + ' (' + info.range + ')');
     if (currentTab === 'deposit') {
