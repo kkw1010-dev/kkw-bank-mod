@@ -61,6 +61,18 @@ GlobalVariable[] Property PropertyPledges Auto
 GlobalVariable Property CollateralLtv Auto
 GlobalVariable Property ForecloseDays Auto
 Quest Property HousePurchase Auto            ; carries HousePurchaseScript and its QF fragment script
+GlobalVariable Property LienReleaseFeePercent Auto
+; Breezehome's front door, the one outside in Whiterun. Persistent, so it resolves from
+; anywhere. Only this door is locked on seizure: the inner door stays as it is, so a
+; player who gets inside some other way is never shut in.
+ObjectReference Property BreezehomeFrontDoor Auto
+
+; What a seizure changed on the door and took from the player, so returning the house
+; puts back exactly that. Plain variables, not properties.
+Bool LockoutApplied = False
+Bool FrontDoorWasLocked = False
+Int FrontDoorLockLevel = 0
+Int KeysTaken = 0
 
 Bool Property bMenuOpen = False Auto
 Int Property CurrentHold = 0 Auto Hidden
@@ -97,7 +109,7 @@ Function ReportState()
     If HoldsReady()
         Trace("accounts: " + BankBalances.Length + " holds bound")
         Trace("enabled holds: " + EnabledHoldList())
-        Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None))
+        Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None) + " frontDoorBound=" + (BreezehomeFrontDoor != None) + " keyBound=" + (PropertyKey(0) != None) + " locked=" + LockoutApplied + " releaseFee=" + LienReleaseFee(0))
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -357,6 +369,9 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"ltv\":" + GetLtvPercent() \
         + ", \"forecloseDays\":" + GetForecloseDays() \
         + ", \"propertyName\":\"" + PropertyName(CurrentHold) + "\"" \
+        + ", \"lienReleaseFee\":" + LienReleaseFee(CurrentHold) \
+        + ", \"lienFeePercent\":" + GetLienFeePercent() \
+        + ", \"propertyLocked\":" + (LockoutApplied as Int) \
         + ", \"txType\":\"" + asTxType + "\"" \
         + ", \"txAmount\":" + aiTxAmount \
         + ", \"message\":\"" + asMessage + "\"}"
@@ -1107,7 +1122,7 @@ Function RepayLoan(Int aiAmount, Int aiPlayerGold)
             AccruedDays[CurrentHold].SetValueInt(0)
         EndIf
         If RestorePropertyIfSeized(CurrentHold)
-            RefreshTx("대출을 모두 갚았습니다. " + PropertyName(CurrentHold) + " 압류가 풀렸습니다.", "repay", paid)
+            RefreshTx("대출을 모두 갚았습니다. " + PropertyName(CurrentHold) + " 압류가 풀렸습니다. 근저당은 남아 있습니다.", "repay", paid)
         Else
             RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
         EndIf
@@ -1197,6 +1212,36 @@ Int Function GetForecloseDays()
     Return days
 EndFunction
 
+Key Function PropertyKey(Int aiHold)
+    If aiHold != 0 || HousePurchase == None
+        Return None
+    EndIf
+    QF_HousePurchase_000A7B33 fragments = HousePurchase as QF_HousePurchase_000A7B33
+    If fragments == None
+        Return None
+    EndIf
+    Return fragments.WhiterunHouseKey
+EndFunction
+
+Int Function GetLienFeePercent()
+    Int pct = 20
+    If LienReleaseFeePercent
+        pct = LienReleaseFeePercent.GetValueInt()
+    EndIf
+    If pct < 0
+        pct = 0
+    ElseIf pct > 100
+        pct = 100
+    EndIf
+    Return pct
+EndFunction
+
+; Releasing a lien is not free, but taking one is: like a real mortgage, the charge
+; falls when the registration is cleared, not when it is made.
+Int Function LienReleaseFee(Int aiHold)
+    Return (PropertyAppraisal(aiHold) * GetLienFeePercent()) / 100
+EndFunction
+
 ; What the pledge adds to the loan ceiling. Nothing once the house is seized.
 Int Function CollateralCredit(Int aiHold)
     If PropertyState(aiHold) != 1 || !PropertyOwned(aiHold)
@@ -1215,47 +1260,72 @@ Function PledgeProperty()
         Return
     EndIf
     If !PropertyOwned(CurrentHold)
-        Refresh("저당 잡힐 집이 없습니다.")
+        Refresh("근저당을 설정할 집이 없습니다.")
         Return
     EndIf
     Int current = PropertyState(CurrentHold)
     If current == 2
-        Refresh("압류된 집은 저당 잡힐 수 없습니다.")
+        Refresh("압류된 집에는 근저당을 설정할 수 없습니다.")
         Return
     ElseIf current == 1
-        Refresh("이미 저당 잡혀 있습니다.")
+        Refresh("이미 근저당이 설정되어 있습니다.")
         Return
     EndIf
 
     PropertyPledges[CurrentHold].SetValueInt(1)
     Int credit = CollateralCredit(CurrentHold)
     Trace("collateral: " + PropertyName(CurrentHold) + " pledged, appraisal=" + PropertyAppraisal(CurrentHold) + " credit=" + credit)
-    RefreshTx(PropertyName(CurrentHold) + "을 저당 잡혔습니다. 대출 한도가 " + credit + " 골드 늘었습니다.", "pledge", credit)
+    RefreshTx(PropertyName(CurrentHold) + "에 근저당을 설정했습니다. 대출 한도가 " + credit + " 골드 늘었습니다. 해지할 때 수수료 " + LienReleaseFee(CurrentHold) + " 골드를 냅니다.", "pledge", credit)
 EndFunction
 
-Function ReleaseProperty()
-    If !CollateralReady() || !HoldIsValid(CurrentHold)
+Function ReleaseProperty(Int aiPlayerGold)
+    If !CollateralReady() || !HoldIsValid(CurrentHold) || Gold001 == None
         Refresh("담보를 취급할 수 없습니다.")
         Return
     EndIf
     If PropertyState(CurrentHold) != 1
-        Refresh("저당 잡힌 집이 없습니다.")
+        Refresh("근저당이 설정된 집이 없습니다.")
         Return
     EndIf
     If BankDebts[CurrentHold].GetValueInt() > 0
-        Refresh("대출을 모두 갚아야 저당을 풀 수 있습니다.")
+        Refresh("대출을 모두 갚아야 근저당을 해지할 수 있습니다.")
         Return
     EndIf
 
+    ; Paid the way a repayment is: purse first, then this hold's account.
+    Int fee = LienReleaseFee(CurrentHold)
+    GlobalVariable acct = BankBalances[CurrentHold]
+    If aiPlayerGold + acct.GetValueInt() < fee
+        Refresh("근저당 해지 수수료 " + fee + " 골드가 부족합니다.")
+        Return
+    EndIf
+    Int fromWallet = aiPlayerGold
+    If fromWallet > fee
+        fromWallet = fee
+    EndIf
+    Int fromBank = fee - fromWallet
+    If fromWallet > 0
+        Game.GetPlayer().RemoveItem(Gold001, fromWallet, True)
+    EndIf
+    If fromBank > 0
+        acct.SetValueInt(acct.GetValueInt() - fromBank)
+    EndIf
+
     PropertyPledges[CurrentHold].SetValueInt(0)
-    Trace("collateral: " + PropertyName(CurrentHold) + " released")
-    RefreshTx(PropertyName(CurrentHold) + " 저당을 풀었습니다.", "release", 0)
+    Trace("collateral: " + PropertyName(CurrentHold) + " lien released, fee=" + fee + " (wallet " + fromWallet + ", account " + fromBank + ")")
+    RefreshTx(PropertyName(CurrentHold) + " 근저당을 해지했습니다. 해지 수수료 " + fee + " 골드를 냈습니다.", "release", fee)
 EndFunction
 
 ; Seizure hands the house's cell to the hold - the same switch the purchase flips the
 ; other way. Nothing inside is moved or deleted, and repaying in full hands it back.
 Function ForeclosePropertyIfDue(Int aiHold)
-    If PropertyState(aiHold) != 1 || !LoansReady()
+    Int current = PropertyState(aiHold)
+    If current == 2
+        ; A seizure that found the player inside locks the door once they have left.
+        ApplyLockout(aiHold)
+        Return
+    EndIf
+    If current != 1 || !LoansReady()
         Return
     EndIf
     If GetOverdueDays(aiHold) < GetForecloseDays()
@@ -1276,12 +1346,69 @@ Function ForeclosePropertyIfDue(Int aiHold)
     PropertyPledges[aiHold].SetValueInt(2)
     Trace("collateral: " + PropertyName(aiHold) + " seized at " + GetOverdueDays(aiHold) + " days overdue, owner now " + owner)
     Debug.Notification(GetHoldName(aiHold) + " 행정관이 " + PropertyName(aiHold) + "을 압류했습니다.")
+    ApplyLockout(aiHold)
+EndFunction
+
+; Keeps the player out of a seized house: the front door is locked as requiring a key,
+; and the key is taken. Vanilla then says what it always says at a locked door. The
+; cell's ownership has already moved, so a way in that skips the door still finds
+; nothing that belongs to the player.
+Function ApplyLockout(Int aiHold)
+    If aiHold != 0 || LockoutApplied || PropertyState(aiHold) != 2
+        Return
+    EndIf
+    Actor player = Game.GetPlayer()
+    Cell house = PropertyCell(aiHold)
+    If house != None && player.GetParentCell() == house
+        Trace("collateral: player is inside " + PropertyName(aiHold) + ", the door is locked once they leave")
+        Return
+    EndIf
+    If BreezehomeFrontDoor == None
+        Trace("collateral: cannot lock " + PropertyName(aiHold) + " - front door not bound")
+        Return
+    EndIf
+
+    FrontDoorWasLocked = BreezehomeFrontDoor.IsLocked()
+    FrontDoorLockLevel = BreezehomeFrontDoor.GetLockLevel()
+    BreezehomeFrontDoor.SetLockLevel(255)
+    BreezehomeFrontDoor.Lock(True)
+
+    KeysTaken = 0
+    Key houseKey = PropertyKey(aiHold)
+    If houseKey != None
+        KeysTaken = player.GetItemCount(houseKey)
+        If KeysTaken > 0
+            player.RemoveItem(houseKey, KeysTaken, True)
+        EndIf
+    EndIf
+
+    LockoutApplied = True
+    Trace("collateral: " + PropertyName(aiHold) + " front door locked (was locked=" + FrontDoorWasLocked + " level=" + FrontDoorLockLevel + "), keys taken=" + KeysTaken)
+    Debug.Notification(PropertyName(aiHold) + " 문이 잠기고 열쇠를 회수당했습니다.")
+EndFunction
+
+Function LiftLockout(Int aiHold)
+    If aiHold != 0 || !LockoutApplied
+        Return
+    EndIf
+    If BreezehomeFrontDoor != None
+        BreezehomeFrontDoor.SetLockLevel(FrontDoorLockLevel)
+        BreezehomeFrontDoor.Lock(FrontDoorWasLocked)
+    EndIf
+    Key houseKey = PropertyKey(aiHold)
+    If houseKey != None && KeysTaken > 0
+        Game.GetPlayer().AddItem(houseKey, KeysTaken, True)
+    EndIf
+    Trace("collateral: " + PropertyName(aiHold) + " front door restored (locked=" + FrontDoorWasLocked + " level=" + FrontDoorLockLevel + "), keys returned=" + KeysTaken)
+    KeysTaken = 0
+    LockoutApplied = False
 EndFunction
 
 Bool Function RestorePropertyIfSeized(Int aiHold)
     If PropertyState(aiHold) != 2
         Return False
     EndIf
+    LiftLockout(aiHold)
     Cell house = PropertyCell(aiHold)
     HousePurchaseScript purchase = HousePurchase as HousePurchaseScript
     If house != None && purchase != None && purchase.PlayerFaction != None
@@ -1289,8 +1416,10 @@ Bool Function RestorePropertyIfSeized(Int aiHold)
     Else
         Trace("collateral: could not hand the cell back - cellBound=" + (house != None) + " purchaseScript=" + (purchase != None))
     EndIf
-    PropertyPledges[aiHold].SetValueInt(0)
-    Trace("collateral: " + PropertyName(aiHold) + " returned to the player")
+    ; The loan is paid, not the lien: the house comes back still pledged, and only a
+    ; release - which costs its fee - clears the registration.
+    PropertyPledges[aiHold].SetValueInt(1)
+    Trace("collateral: " + PropertyName(aiHold) + " returned to the player, lien still registered")
     Return True
 EndFunction
 
@@ -1428,7 +1557,7 @@ Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form send
     ElseIf strArg == "pledgeProperty"
         PledgeProperty()
     ElseIf strArg == "releaseProperty"
-        ReleaseProperty()
+        ReleaseProperty(playerGold)
     ElseIf strArg == "sellBond"
         Refresh("채권 매각은 서드파티 연동 후 사용할 수 있습니다.")
     ElseIf StringUtil.Find(strArg, "diag:") == 0

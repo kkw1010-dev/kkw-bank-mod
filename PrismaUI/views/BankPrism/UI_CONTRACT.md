@@ -38,12 +38,15 @@ window.bankUpdateParams(jsonString)
 | `propertyValue` | 정수 | 집 감정가. 바닐라 구입가(`HPWhiterun`) |
 | `collateralCredit` | 정수 | 저당으로 늘어난 대출 한도. `loanLimit`에 이미 포함되어 있다 |
 | `ltv` | 정수 | 감정가 중 담보로 인정하는 비율(%) |
-| `forecloseDays` | 정수 | 저당 중인 집이 압류되는 연체 일수 |
+| `forecloseDays` | 정수 | 근저당이 설정된 집이 압류되는 연체 일수 |
+| `lienReleaseFee` | 정수 | 근저당 해지 수수료(골드) |
+| `lienFeePercent` | 정수 | 그 수수료가 감정가의 몇 %인지 |
+| `propertyLocked` | 정수 | 압류로 문이 잠기고 열쇠를 회수했으면 1. 압류 순간 집 안에 있었다면 나올 때까지 0 |
 | `propertyName` | 문자열 | 집 이름 (브리즈홈). 없는 홀드는 빈 문자열 |
 
 `txType`이 비어 있지 않을 때만 거래 기록에 한 줄을 추가한다. 값은
 `deposit` / `withdraw` / `borrow` / `repay` / `payCredit` / `pledge` / `release` 중 하나다.
-`pledge`와 `release`는 골드가 움직이지 않으므로 거래 기록에 올리지 않는다.
+`pledge`는 골드가 움직이지 않아 기록하지 않고, `release`는 해지 수수료로 대출 기록에 한 줄 남긴다.
 
 ### 등급명과 단계
 
@@ -97,8 +100,8 @@ window.bankAction(payload)
 | `repay` | 필요 | 대출 상환 |
 | `payCredit` | 불필요 | 외상 상환 |
 | `sellBond` | 불필요 | 채권 매각 (미구현) |
-| `pledgeProperty` | 불필요 | 소유한 집을 저당 잡힌다 |
-| `releaseProperty` | 불필요 | 저당을 푼다. 대출이 남아 있으면 게임이 거절한다 |
+| `pledgeProperty` | 불필요 | 소유한 집에 근저당을 설정한다 (무료) |
+| `releaseProperty` | 불필요 | 근저당을 해지한다. 수수료를 소지금, 예금 순으로 낸다. 대출이 남았거나 수수료가 모자라면 게임이 거절한다 |
 | `close` | 불필요 | 창 닫기 |
 
 ## 3. 반드시 남겨야 하는 것

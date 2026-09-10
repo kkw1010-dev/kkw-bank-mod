@@ -203,7 +203,9 @@ namespace EspGenerator
                 var id = Convert.ToUInt32(args[1], 16);
                 var q = esm.Quests.FirstOrDefault(x => x.FormKey.ID == id);
                 if (q == null) { Console.WriteLine("no such quest"); return; }
-                Console.WriteLine($"QUST {q.FormKey.ID:X6} {q.EditorID}");
+                Console.WriteLine($"QUST {q.FormKey.ID:X6} {q.EditorID}  event={q.Event}  flags={q.Flags}");
+                foreach (var al in q.Aliases)
+                    Console.WriteLine($"  alias {al.ID,3} {al.Name,-24} forced={al.ForcedReference.FormKeyNullable}");
                 var vm = q.VirtualMachineAdapter;
                 if (vm == null) { Console.WriteLine("  (no scripts)"); return; }
                 var qcache = esm.ToImmutableLinkCache();
@@ -228,6 +230,38 @@ namespace EspGenerator
                         };
                         Console.WriteLine($"    {pr.Name,-28} = {v}");
                     }
+                }
+                return;
+            }
+
+            // Every door inside a cell and every door that leads into it, with its lock and
+            // key. Locking a house means locking the right references; this names them.
+            if (args.Length > 1 && args[0] == "doors")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var dcache = esm.ToImmutableLinkCache();
+                var inside = new HashSet<FormKey>();
+                var doorRefs = new List<(IPlacedObjectGetter rec, string where)>();
+                foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedObject, IPlacedObjectGetter>(dcache))
+                {
+                    if (!dcache.TryResolve<IDoorGetter>(ctx.Record.Base.FormKey, out _)) continue;
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    var cellRec = parent?.Record as ICellGetter;
+                    string where = cellRec?.EditorID ?? $"(exterior cell {cellRec?.FormKey.ID:X6})";
+                    doorRefs.Add((ctx.Record, where));
+                    if (string.Equals(cellRec?.EditorID, args[1], StringComparison.OrdinalIgnoreCase))
+                        inside.Add(ctx.Record.FormKey);
+                }
+                foreach (var (rec, where) in doorRefs)
+                {
+                    var dest = rec.TeleportDestination?.Door.FormKeyNullable;
+                    bool isInside = inside.Contains(rec.FormKey);
+                    bool leadsIn = dest is FormKey dk && inside.Contains(dk);
+                    if (!isInside && !leadsIn) continue;
+                    Console.WriteLine($"  {(isInside ? "inside " : "leadsIn")} ref={rec.FormKey.ID:X8} cell={where} base={rec.Base.FormKey.ID:X6} " +
+                                      $"dest={(dest is FormKey dd ? dd.ID.ToString("X8") : "-")} lockLevel={rec.Lock?.Level} key={rec.Lock?.Key.FormKeyNullable} persistent={rec.MajorRecordFlagsRaw & 0x400}");
                 }
                 return;
             }
@@ -1116,6 +1150,7 @@ namespace EspGenerator
             const uint IdPropertyPledgeBase = 0x8D0; // per hold: 0 none, 1 house pledged, 2 seized
             const uint IdCollateralLtv   = 0x8E0;  // share of the appraisal lent against, percent
             const uint IdForecloseDays   = 0x8E1;  // days overdue before a pledged house is seized
+            const uint IdLienFeePct      = 0x8E2;  // fee to release a lien, percent of the appraisal
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
@@ -1220,6 +1255,7 @@ namespace EspGenerator
                 propertyPledges.Add(NewGlobal(IdPropertyPledgeBase + i, "BankPropertyPledge" + holds[i].name));
             var collateralLtv = NewGlobal(IdCollateralLtv, "BankCollateralLtvPercent", 60f);
             var forecloseDays = NewGlobal(IdForecloseDays, "BankForecloseOverdueDays", 7f);
+            var lienFeePct = NewGlobal(IdLienFeePct, "BankLienReleaseFeePercent", 20f);
 
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
             // Charged per DAY overdue, on the original sum. A weekly charge left the
@@ -1490,6 +1526,7 @@ namespace EspGenerator
             // as the array's readiness flag instead of touching an unbound array.
             ObjProp("CollateralLtv", collateralLtv.FormKey);
             ObjProp("ForecloseDays", forecloseDays.FormKey);
+            ObjProp("LienReleaseFeePercent", lienFeePct.FormKey);
 
             // ---- Standing: the records each tier is actually read from -----------------
             // Every id below was read out of Skyrim.esm with the probes in this file, not
@@ -1520,6 +1557,9 @@ namespace EspGenerator
             // 0F728B, PlayerFaction) and the stage-10 fragment script whose WhiterunHouse
             // property is Breezehome's interior cell, 0165A8. Read with `qfrag 0A7B33`.
             ObjProp("HousePurchase", Vanilla(0x0A7B33));
+            // Breezehome's front door in Whiterun: persistent, teleports to 000166A9 inside
+            // WhiterunBreezehome. Read with `dotnet run -- doors WhiterunBreezehome`.
+            ObjProp("BreezehomeFrontDoor", Vanilla(0x01A6F9));
 
             ObjProp("Gold001", Gold001);
 
