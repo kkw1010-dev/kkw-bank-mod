@@ -62,6 +62,76 @@ namespace EspGenerator
 
         static void Main(string[] args)
         {
+            // Read an arbitrary installed plugin without generating anything.  This is
+            // intentionally a structural probe: external prison mods must be inspected
+            // before BankPrism is allowed to depend on a cell, marker, quest or alias.
+            //   dotnet run -- external <absolute-plugin-path>
+            if (args.Length > 1 && args[0] == "external")
+            {
+                string pluginPath = args[1];
+                if (!File.Exists(pluginPath))
+                {
+                    Console.WriteLine($"not found: {pluginPath}");
+                    return;
+                }
+
+                using var plugin = SkyrimMod.CreateFromBinaryOverlay(pluginPath, SkyrimRelease.SkyrimSE);
+                var cache = plugin.ToImmutableLinkCache();
+                string Named(FormKey? key) =>
+                    key is FormKey form && cache.TryResolve(form, out var record)
+                        ? $"{form} {record.EditorID} ({record.GetType().Name})"
+                        : key?.ToString() ?? "(none)";
+                Console.WriteLine($"=== {plugin.ModKey} ===");
+                Console.WriteLine("masters: " + string.Join(", ", plugin.ModHeader.MasterReferences.Select(x => x.Master)));
+                Console.WriteLine($"quests={plugin.Quests.Count} cells={plugin.Cells.Count} factions={plugin.Factions.Count}");
+
+                foreach (var quest in plugin.Quests)
+                {
+                    Console.WriteLine($"QUST {quest.FormKey.ID:X6} {quest.EditorID} name=\"{quest.Name}\" aliases={quest.Aliases.Count}");
+                    foreach (var alias in quest.Aliases)
+                        Console.WriteLine($"  alias {alias.ID,3} {alias.Name,-28} forced={alias.ForcedReference.FormKeyNullable}");
+                    var vm = quest.VirtualMachineAdapter;
+                    if (vm != null)
+                        foreach (var script in vm.Scripts)
+                        {
+                            Console.WriteLine($"  script {script.Name}");
+                            foreach (var property in script.Properties)
+                            {
+                                string value = property switch
+                                {
+                                    IScriptObjectPropertyGetter obj => Named(obj.Object.FormKeyNullable),
+                                    IScriptIntPropertyGetter integer => integer.Data.ToString(),
+                                    IScriptFloatPropertyGetter number => number.Data.ToString(),
+                                    IScriptBoolPropertyGetter flag => flag.Data.ToString(),
+                                    _ => property.GetType().Name
+                                };
+                                Console.WriteLine($"    {property.Name,-28} = {value}");
+                            }
+                        }
+                }
+
+                foreach (var cell in plugin.EnumerateMajorRecords<ICellGetter>())
+                    Console.WriteLine($"CELL {cell.FormKey.ID:X6} {cell.EditorID} name=\"{cell.Name}\" flags={cell.Flags}");
+
+                foreach (var ctx in plugin.EnumerateMajorRecordContexts<IPlacedNpc, IPlacedNpcGetter>(cache))
+                {
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    var cell = parent?.Record as ICellGetter;
+                    Console.WriteLine($"NPCREF {ctx.Record.FormKey.ID:X8} base={Named(ctx.Record.Base.FormKeyNullable)} cell={cell?.FormKey.ID:X6} {cell?.EditorID} persistent={(ctx.Record.MajorRecordFlagsRaw & 0x400) != 0}");
+                }
+
+                foreach (var ctx in plugin.EnumerateMajorRecordContexts<IPlacedObject, IPlacedObjectGetter>(cache))
+                {
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    var cell = parent?.Record as ICellGetter;
+                    var dest = ctx.Record.TeleportDestination?.Door.FormKeyNullable;
+                    Console.WriteLine($"OBJREF {ctx.Record.FormKey.ID:X8} base={Named(ctx.Record.Base.FormKeyNullable)} cell={cell?.FormKey.ID:X6} {cell?.EditorID} dest={dest} persistent={(ctx.Record.MajorRecordFlagsRaw & 0x400) != 0}");
+                }
+                return;
+            }
+
             // Generic record search. Added because judging tier requirements from
             // memory is exactly the guessing this project keeps getting burned by:
             // "there is no Thane faction" was only settled by looking.
