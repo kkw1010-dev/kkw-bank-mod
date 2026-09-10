@@ -109,12 +109,60 @@ EndFunction
 ; Dumps what is bound and what is not. The property structure is what breaks when
 ; the plugin changes under an existing save, and it is invisible from inside the
 ; game, so it is written out where it can be read after the fact.
+; Whether the two topics can be offered right now, checked the way their INFO conditions
+; check it. Every hold steward carries JobStewardFaction at rank -1 in the base record;
+; the faction is granted at run time by the Steward alias of the town's Dialogue quest
+; (DialogueWhiterun 0270A4, alias 14, unique actor Proventus). So the bank topic lives or
+; dies with a vanilla alias the build cannot see, and a missing topic used to leave no
+; trace at all. Ids are Skyrim.esm's, read with `aliasfaction`, `refs` and `factions`.
+; Game.GetForm rather than properties, so this adds nothing to the save format.
+Function ReportDialogueReach()
+    Faction steward = Game.GetForm(0x00050922) as Faction
+    Faction crimeWhiterun = Game.GetForm(0x000267EA) as Faction
+    Faction belethorsStore = Game.GetForm(0x0009CAF5) as Faction
+    Faction riverwoodTrader = Game.GetForm(0x0005A665) as Faction
+    Quest townDialogue = Game.GetForm(0x000270A4) as Quest
+    Actor proventus = Game.GetForm(0x0001A67D) as Actor
+    Actor belethor = Game.GetForm(0x0001A672) as Actor
+    Actor lucan = Game.GetForm(0x00013487) as Actor
+
+    Bool bankOk = False
+    If proventus != None && steward != None && crimeWhiterun != None
+        bankOk = proventus.IsInFaction(steward) && proventus.IsInFaction(crimeWhiterun)
+        Trace("reach: Proventus dead=" + proventus.IsDead() + " disabled=" + proventus.IsDisabled() + " JobStewardFaction in=" + proventus.IsInFaction(steward) + " rank=" + proventus.GetFactionRank(steward) + " CrimeFactionWhiterun in=" + proventus.IsInFaction(crimeWhiterun) + " -> bank topic conditions met=" + bankOk)
+    Else
+        Trace("reach: could not resolve Proventus or his factions")
+    EndIf
+
+    If townDialogue != None
+        String holder = "nobody"
+        ReferenceAlias stewardAlias = townDialogue.GetAlias(14) as ReferenceAlias
+        If stewardAlias != None && stewardAlias.GetActorReference() != None
+            holder = "" + stewardAlias.GetActorReference()
+        EndIf
+        Trace("reach: DialogueWhiterun running=" + townDialogue.IsRunning() + " Steward alias holds " + holder)
+    Else
+        Trace("reach: could not resolve DialogueWhiterun")
+    EndIf
+
+    Bool belethorOk = belethor != None && belethorsStore != None && belethor.IsInFaction(belethorsStore)
+    Bool lucanOk = lucan != None && riverwoodTrader != None && lucan.IsInFaction(riverwoodTrader)
+    Trace("reach: Belethor store faction in=" + belethorOk + " Lucan store faction in=" + lucanOk + " BankPrismQuest running=" + IsRunning())
+
+    If bankOk
+        Debug.Notification("BankPrism: 행정관 대화 조건 충족")
+    Else
+        Debug.Notification("BankPrism: 행정관 대화 조건 불충족 - 로그의 reach 줄 확인")
+    EndIf
+EndFunction
+
 Function ReportState()
     Trace("state: running=" + IsRunning() + " stopped=" + IsStopped()         + " holdsReady=" + HoldsReady() + " loansReady=" + LoansReady()         + " standingReady=" + StandingReady() + " hold=" + CurrentHold)
     Trace("bindings: crimeFactions=" + (HoldCrimeFactions != None)         + " gold=" + (Gold001 != None) + " courier=" + (Courier != None)         + " thaneTracker=" + (ThaneTracker != None) + " civilWar=" + (CivilWar != None)         + " college=" + (CollegeFaction != None))
     If HoldsReady()
         Trace("accounts: " + BankBalances.Length + " holds bound")
         Trace("enabled holds: " + EnabledHoldList())
+        ReportDialogueReach()
         Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None) + " frontDoorBound=" + (BreezehomeFrontDoor != None) + " keyBound=" + (PropertyKey(0) != None) + " locked=" + LockoutApplied + " releaseFee=" + LienReleaseFee(0))
         Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None))
     Else

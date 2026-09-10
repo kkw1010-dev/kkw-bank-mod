@@ -266,6 +266,22 @@ namespace EspGenerator
                 return;
             }
 
+            // Quest aliases that hand out a faction while they are filled. An NPC whose base
+            // record carries the faction at rank -1 only counts as a member while such an
+            // alias holds him, so a dialogue condition on that faction depends on the alias.
+            if (args.Length > 1 && args[0] == "aliasfaction")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var fac = esm.Factions.FirstOrDefault(f => string.Equals(f.EditorID, args[1], StringComparison.OrdinalIgnoreCase));
+                if (fac == null) { Console.WriteLine("no such faction"); return; }
+                foreach (var q in esm.Quests)
+                    foreach (var al in q.Aliases)
+                        if (al.Factions.Any(f => f.FormKey == fac.FormKey))
+                            Console.WriteLine($"  QUST {q.FormKey.ID:X6} {q.EditorID,-36} alias {al.ID,3} {al.Name,-24} forced={al.ForcedReference.FormKeyNullable} uniqueActor={al.UniqueActor.FormKeyNullable} flags={al.Flags}");
+                return;
+            }
+
             if (args.Length > 1 && args[0] == "quest")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -1793,6 +1809,29 @@ namespace EspGenerator
             var crimeToHold = holds.ToDictionary(h => h.crime, h => h.name);
 
             Console.WriteLine();
+            // Membership as the engine sees it. A base-record rank of -1 means "not a member":
+            // every hold steward carries JobStewardFaction that way, and the faction is granted
+            // at run time by the Steward alias of the town's Dialogue quest (DialogueWhiterun
+            // holds Proventus). Counting -1 as membership let this check report a reach that
+            // actually depends on a vanilla alias, without saying so.
+            var refBase = new Dictionary<FormKey, FormKey>();
+            foreach (var r in esm.EnumerateMajorRecords<IPlacedNpcGetter>())
+                refBase[r.FormKey] = r.Base.FormKey;
+            var aliasGrants = new Dictionary<FormKey, List<(FormKey faction, string source)>>();
+            foreach (var q in esm.Quests)
+                foreach (var al in q.Aliases)
+                {
+                    FormKey? who = al.UniqueActor.FormKeyNullable;
+                    if (who == null && al.ForcedReference.FormKeyNullable is FormKey fr && refBase.TryGetValue(fr, out var b))
+                        who = b;
+                    if (who is not FormKey actor) continue;
+                    foreach (var f in al.Factions)
+                    {
+                        if (!aliasGrants.TryGetValue(actor, out var list)) aliasGrants[actor] = list = new();
+                        list.Add((f.FormKey, $"{q.EditorID}:{al.Name}"));
+                    }
+                }
+
             Console.WriteLine("--- 대화문 도달 범위 (Skyrim.esm 기준) ---");
             foreach (var topic in mod.DialogTopics)
             foreach (var info in topic.Responses)
@@ -1815,12 +1854,18 @@ namespace EspGenerator
                 var reached = new List<string>();
                 foreach (var npc in esm.Npcs)
                 {
-                    var mine = npc.Factions.Select(fr => fr.Faction.FormKeyNullable).OfType<FormKey>().ToHashSet();
+                    var baseMember = npc.Factions.Where(rp => rp.Rank >= 0)
+                        .Select(rp => rp.Faction.FormKeyNullable).OfType<FormKey>().ToHashSet();
+                    var mine = new HashSet<FormKey>(baseMember);
+                    aliasGrants.TryGetValue(npc.FormKey, out var granted);
+                    if (granted != null) foreach (var gr in granted) mine.Add(gr.faction);
                     if (!plain.All(mine.Contains)) continue;
                     if (anyOf.Count > 0 && !anyOf.Any(mine.Contains)) continue;
                     var crime = npc.CrimeFaction.FormKeyNullable;
                     string hold = crime is FormKey ck && crimeToHold.TryGetValue(ck, out var hn) ? hn : "(홀드 없음)";
-                    reached.Add($"{npc.EditorID}={hold}");
+                    var via = granted?.Where(gr => (plain.Contains(gr.faction) || anyOf.Contains(gr.faction)) && !baseMember.Contains(gr.faction))
+                                      .Select(gr => gr.source).Distinct().ToList();
+                    reached.Add($"{npc.EditorID}={hold}" + (via is { Count: > 0 } ? $" (런타임 별칭 의존: {string.Join(", ", via)})" : ""));
                     if (!enabledHolds.Contains(hold))
                         problems.Add($"{info.EditorID}: 꺼진 홀드의 NPC에게 뜬다 - {npc.EditorID} ({hold})");
                 }
