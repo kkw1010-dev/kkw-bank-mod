@@ -43,6 +43,13 @@ window.bankUpdateParams(jsonString)
 | `lienFeePercent` | 정수 | 그 수수료가 감정가의 몇 %인지 |
 | `propertyLocked` | 정수 | 압류로 문이 잠기고 열쇠를 회수했으면 1. 압류 순간 집 안에 있었다면 나올 때까지 0 |
 | `propertyName` | 문자열 | 집 이름 (브리즈홈). 없는 홀드는 빈 문자열 |
+| `guarantorAppointed` | 정수 | 종사(Thane)로 임명되어 하우스칼을 하사받았으면 1. 지금은 화이트런(리디아)만 |
+| `guarantorAlive` | 정수 | 보증인이 살아있으면 1, 사망했으면 0 |
+| `guarantorState` | 정수 | 0 미보증 · 1 보증 중 · 2 연체로 구상권 집행됨 |
+| `guarantorCredit` | 정수 | 보증으로 늘어난 대출 한도. `loanLimit`에 이미 포함되어 있다 |
+| `guarantorCreditAmount` | 정수 | 이 홀드 보증인의 기본 보증 한도 (2,000 G) |
+| `guarantorName` | 문자열 | 보증인 이름 (리디아) |
+| `guarantorTitle` | 문자열 | 보증인 직책 (화이트런 하우스칼) |
 
 `txType`이 비어 있지 않을 때만 거래 기록에 한 줄을 추가한다. 값은
 `deposit` / `withdraw` / `borrow` / `repay` / `payCredit` / `pledge` / `release` 중 하나다.
@@ -102,6 +109,8 @@ window.bankAction(payload)
 | `sellBond` | 불필요 | 채권 매각 (미구현) |
 | `pledgeProperty` | 불필요 | 소유한 집에 근저당을 설정한다 (무료) |
 | `releaseProperty` | 불필요 | 근저당을 해지한다. 수수료를 소지금, 예금 순으로 낸다. 대출이 남았거나 수수료가 모자라면 게임이 거절한다 |
+| `pledgeGuarantor` | 불필요 | 영지 하우스칼(화이트런: 리디아)을 대출 연대보증인으로 등록한다 (무료) |
+| `releaseGuarantor` | 불필요 | 연대보증을 해지한다. 잔여 대출이 남아 있으면 게임이 거절한다 |
 | `close` | 불필요 | 창 닫기 |
 
 ## 3. 반드시 남겨야 하는 것

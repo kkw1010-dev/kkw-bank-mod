@@ -62,6 +62,12 @@ GlobalVariable Property CollateralLtv Auto
 GlobalVariable Property ForecloseDays Auto
 Quest Property HousePurchase Auto            ; carries HousePurchaseScript and its QF fragment script
 GlobalVariable Property LienReleaseFeePercent Auto
+; --- guarantor ------------------------------------------------------------
+; Per hold: 0 no pledge, 1 pledged, 2 claimed/defaulted. GuarantorCredit is bound
+; in the same generation and stands in as the readiness flag.
+GlobalVariable[] Property GuarantorPledges Auto
+GlobalVariable Property GuarantorCredit Auto
+Actor Property HousecarlWhiterun Auto
 ; Breezehome's front door, the one outside in Whiterun. Persistent, so it resolves from
 ; anywhere. Only this door is locked on seizure: the inner door stays as it is, so a
 ; player who gets inside some other way is never shut in.
@@ -110,6 +116,7 @@ Function ReportState()
         Trace("accounts: " + BankBalances.Length + " holds bound")
         Trace("enabled holds: " + EnabledHoldList())
         Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None) + " frontDoorBound=" + (BreezehomeFrontDoor != None) + " keyBound=" + (PropertyKey(0) != None) + " locked=" + LockoutApplied + " releaseFee=" + LienReleaseFee(0))
+        Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None))
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -318,6 +325,7 @@ Function ShowBank()
     bMenuOpen = True
     AccrueOverdue(CurrentHold)
     ForeclosePropertyIfDue(CurrentHold)
+    ClaimGuarantorIfDue(CurrentHold)
     BankPrismNative.OpenMenu()
     Refresh("")
 EndFunction
@@ -372,6 +380,13 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"lienReleaseFee\":" + LienReleaseFee(CurrentHold) \
         + ", \"lienFeePercent\":" + GetLienFeePercent() \
         + ", \"propertyLocked\":" + (LockoutApplied as Int) \
+        + ", \"guarantorAppointed\":" + (GuarantorAppointed(CurrentHold) as Int) \
+        + ", \"guarantorAlive\":" + (GuarantorAlive(CurrentHold) as Int) \
+        + ", \"guarantorState\":" + GuarantorState(CurrentHold) \
+        + ", \"guarantorCredit\":" + GuarantorCredit(CurrentHold) \
+        + ", \"guarantorCreditAmount\":" + GuarantorCreditBase(CurrentHold) \
+        + ", \"guarantorName\":\"" + GuarantorName(CurrentHold) + "\"" \
+        + ", \"guarantorTitle\":\"" + GuarantorTitle(CurrentHold) + "\"" \
         + ", \"txType\":\"" + asTxType + "\"" \
         + ", \"txAmount\":" + aiTxAmount \
         + ", \"message\":\"" + asMessage + "\"}"
@@ -593,8 +608,9 @@ Int Function GetLoanLimit()
         limit = WithPathBonus(GetGlobalInt(LoanLimits[tier - 1]), CurrentHold)
     EndIf
     ; A pledged house is lent against at any standing: the court that will not trust a
-    ; nameless sellsword on his word will still take his deed.
-    Return limit + CollateralCredit(CurrentHold)
+    ; nameless sellsword on his word will still take his deed. A housecarl guarantee also
+    ; adds to the ceiling.
+    Return limit + CollateralCredit(CurrentHold) + GuarantorCredit(CurrentHold)
 EndFunction
 
 Int Function GetLoanTermDays()
@@ -1121,8 +1137,14 @@ Function RepayLoan(Int aiAmount, Int aiPlayerGold)
         If LoansReady()
             AccruedDays[CurrentHold].SetValueInt(0)
         EndIf
-        If RestorePropertyIfSeized(CurrentHold)
+        Bool propRestored = RestorePropertyIfSeized(CurrentHold)
+        Bool guarRestored = RestoreGuarantorIfClaimed(CurrentHold)
+        If propRestored && guarRestored
+            RefreshTx("대출을 모두 갚았습니다. " + PropertyName(CurrentHold) + " 압류와 " + GuarantorName(CurrentHold) + "의 연대보증 추심이 풀렸습니다.", "repay", paid)
+        ElseIf propRestored
             RefreshTx("대출을 모두 갚았습니다. " + PropertyName(CurrentHold) + " 압류가 풀렸습니다. 근저당은 남아 있습니다.", "repay", paid)
+        ElseIf guarRestored
+            RefreshTx("대출을 모두 갚았습니다. " + GuarantorName(CurrentHold) + "의 연대보증 추심이 풀렸습니다. 보증은 유지됩니다.", "repay", paid)
         Else
             RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
         EndIf
@@ -1424,6 +1446,140 @@ Bool Function RestorePropertyIfSeized(Int aiHold)
 EndFunction
 
 ; ---------------------------------------------------------------------------
+; Joint surety / Guarantor
+; ---------------------------------------------------------------------------
+
+Bool Function GuarantorReady()
+    Return GuarantorCredit != None
+EndFunction
+
+String Function GuarantorName(Int aiHold)
+    If aiHold == 0
+        Return "리디아"
+    EndIf
+    Return ""
+EndFunction
+
+String Function GuarantorTitle(Int aiHold)
+    If aiHold == 0
+        Return "화이트런 하우스칼"
+    EndIf
+    Return ""
+EndFunction
+
+Bool Function GuarantorAppointed(Int aiHold)
+    If aiHold == 0
+        Return IsThaneOf(0) && HousecarlWhiterun != None
+    EndIf
+    Return False
+EndFunction
+
+Bool Function GuarantorAlive(Int aiHold)
+    If aiHold == 0 && HousecarlWhiterun != None
+        Return !HousecarlWhiterun.IsDead()
+    EndIf
+    Return False
+EndFunction
+
+Int Function GuarantorState(Int aiHold)
+    If !GuarantorReady() || !HoldIsValid(aiHold)
+        Return 0
+    EndIf
+    Return GuarantorPledges[aiHold].GetValueInt()
+EndFunction
+
+Int Function GuarantorCreditBase(Int aiHold)
+    If aiHold == 0 && GuarantorCredit != None
+        Return GuarantorCredit.GetValueInt()
+    EndIf
+    Return 0
+EndFunction
+
+; What the guarantor adds to the loan ceiling.
+Int Function GuarantorCredit(Int aiHold)
+    If !GuarantorReady() || !HoldIsValid(aiHold)
+        Return 0
+    EndIf
+    If GuarantorState(aiHold) != 1 || !GuarantorAppointed(aiHold) || !GuarantorAlive(aiHold)
+        Return 0
+    EndIf
+    Return GuarantorCreditBase(aiHold)
+EndFunction
+
+Function PledgeGuarantor()
+    If !GuarantorReady()
+        Refresh("이 저장 파일에서는 보증을 취급할 수 없습니다. 새 회차가 필요합니다.")
+        Return
+    EndIf
+    If !HoldIsValid(CurrentHold) || !HoldIsEnabled(CurrentHold)
+        Refresh("보증을 취급할 수 없습니다.")
+        Return
+    EndIf
+    If !GuarantorAppointed(CurrentHold)
+        Refresh("연대보증을 설 하우스칼이 없습니다.")
+        Return
+    EndIf
+    If !GuarantorAlive(CurrentHold)
+        Refresh("보증인이 사망하여 연대보증을 세울 수 없습니다.")
+        Return
+    EndIf
+    Int current = GuarantorState(CurrentHold)
+    If current == 2
+        Refresh("구상권이 집행된 보증인은 다시 보증을 설 수 없습니다.")
+        Return
+    ElseIf current == 1
+        Refresh("이미 연대보증이 설정되어 있습니다.")
+        Return
+    EndIf
+
+    GuarantorPledges[CurrentHold].SetValueInt(1)
+    Int credit = GuarantorCredit(CurrentHold)
+    Trace("guarantor: " + GuarantorName(CurrentHold) + " pledged, credit=" + credit)
+    Refresh(GuarantorName(CurrentHold) + "을 연대보증인으로 등록했습니다. 대출 한도가 " + credit + " 골드 늘었습니다.")
+EndFunction
+
+Function ReleaseGuarantor()
+    If !GuarantorReady() || !HoldIsValid(CurrentHold)
+        Refresh("보증을 취급할 수 없습니다.")
+        Return
+    EndIf
+    If GuarantorState(CurrentHold) != 1
+        Refresh("설정된 연대보증이 없습니다.")
+        Return
+    EndIf
+    If BankDebts[CurrentHold].GetValueInt() > 0
+        Refresh("대출을 모두 갚아야 연대보증을 해제할 수 있습니다.")
+        Return
+    EndIf
+
+    GuarantorPledges[CurrentHold].SetValueInt(0)
+    Trace("guarantor: " + GuarantorName(CurrentHold) + " released")
+    Refresh(GuarantorName(CurrentHold) + "의 연대보증을 해제했습니다.")
+EndFunction
+
+Function ClaimGuarantorIfDue(Int aiHold)
+    Int current = GuarantorState(aiHold)
+    If current != 1 || !LoansReady()
+        Return
+    EndIf
+    If GetOverdueDays(aiHold) < GetForecloseDays()
+        Return
+    EndIf
+    GuarantorPledges[aiHold].SetValueInt(2)
+    Trace("guarantor: " + GuarantorName(aiHold) + " claimed at " + GetOverdueDays(aiHold) + " days overdue")
+    Debug.Notification(GetHoldName(aiHold) + " 행정관이 연대보증인 " + GuarantorName(aiHold) + "에게 구상권을 청구했습니다.")
+EndFunction
+
+Bool Function RestoreGuarantorIfClaimed(Int aiHold)
+    If GuarantorState(aiHold) != 2
+        Return False
+    EndIf
+    GuarantorPledges[aiHold].SetValueInt(1)
+    Trace("guarantor: " + GuarantorName(aiHold) + " claim lifted upon full repayment")
+    Return True
+EndFunction
+
+; ---------------------------------------------------------------------------
 ; Dunning letters
 ; ---------------------------------------------------------------------------
 
@@ -1511,6 +1667,7 @@ Event OnUpdateGameTime()
         If HoldIsEnabled(i)
             AccrueOverdue(i)
             ForeclosePropertyIfDue(i)
+            ClaimGuarantorIfDue(i)
             ; Letter N is written for day N overdue - day three's says 사흘째 - so none
             ; goes out on the due date itself. Before, day one's letter arrived twice:
             ; once at zero days overdue, clamped up to one, and again at one.
@@ -1558,6 +1715,10 @@ Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form send
         PledgeProperty()
     ElseIf strArg == "releaseProperty"
         ReleaseProperty(playerGold)
+    ElseIf strArg == "pledgeGuarantor"
+        PledgeGuarantor()
+    ElseIf strArg == "releaseGuarantor"
+        ReleaseGuarantor()
     ElseIf strArg == "sellBond"
         Refresh("채권 매각은 서드파티 연동 후 사용할 수 있습니다.")
     ElseIf StringUtil.Find(strArg, "diag:") == 0

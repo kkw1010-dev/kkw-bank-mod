@@ -1114,7 +1114,7 @@
               <button class="col-nav-btn" id="col-btn-guarantor" onclick="showCollateralSub('guarantor')">
                 <span class="col-icon">🛡️</span>
                 <span>보증인 연대</span>
-                <span class="col-nav-count">준비 중</span>
+                <span class="col-nav-count" id="colNavGuarCount">—</span>
               </button>
             </div>
 
@@ -1156,7 +1156,31 @@
 
             <div class="col-sub-view" id="col-view-guarantor">
               <div class="col-banner">
-                <span>🛡️ <b>보증인 연대</b>: 준비 중입니다. 종사의 하우스칼이 채무를 보증하는 기능이 들어갈 자리입니다.</span>
+                <span>🛡️ <b>보증인 연대</b>: 영지의 종사(Thane)에게 임명된 하우스칼이 채무를 연대보증합니다. 대출 한도가 늘어나며, 연체 시 보증인에게 구상권이 집행됩니다.</span>
+                <span style="font-size: 13px; color: var(--gold);" id="guarCreditBanner">보증 한도 +2,000 G</span>
+              </div>
+
+              <div class="col-card" id="guarCard">
+                <div class="col-card-head">
+                  <div class="col-card-title-grp">
+                    <span class="col-icon">🛡️</span>
+                    <span class="col-card-title" id="guarTitle">리디아 (Lydia)</span>
+                    <span class="col-badge guarantor" id="guarBadge">화이트런 하우스칼</span>
+                  </div>
+                  <span class="col-status-pill unregistered" id="guarPill">정보 없음</span>
+                </div>
+                <div class="col-card-metrics">
+                  <span>직책 <b id="guarRole">하우스칼</b></span>
+                  <span class="highlight">보증 한도 <b id="guarCredit">—</b></span>
+                  <span>추심 기준 <b id="guarForeclose">—</b></span>
+                  <span>보증 해지 <b id="guarFee">수수료 없음</b></span>
+                </div>
+                <div class="col-card-desc" id="guarDesc">게임에서 아직 정보가 오지 않았습니다.</div>
+                <div class="grade-warning-badge" id="guarWarning" style="display: none; margin-top: 4px; margin-bottom: 8px;"></div>
+                <div class="col-action-row">
+                  <button class="col-btn primary" id="guarPledgeBtn" onclick="pledgeGuarantor()">연대보증 설정</button>
+                  <button class="col-btn secondary" id="guarReleaseBtn" onclick="releaseGuarantor()" style="display: none;">연대보증 해제</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1408,6 +1432,8 @@
     paths: 1, pathList: '',
     propertyOwned: 0, propertyState: 0, propertyValue: 0, collateralCredit: 0,
     ltv: 60, forecloseDays: 7, propertyName: '', lienReleaseFee: 0, lienFeePercent: 20, propertyLocked: 0,
+    guarantorAppointed: 0, guarantorAlive: 1, guarantorState: 0, guarantorCredit: 0, guarantorCreditAmount: 2000,
+    guarantorName: '리디아', guarantorTitle: '화이트런 하우스칼',
     received: false
   };
   var amount = 0;
@@ -1525,6 +1551,19 @@
     sendAction('releaseProperty', 0);
   }
 
+  function pledgeGuarantor() {
+    if (state.guarantorState === 1) { setStatus('이미 연대보증이 설정되어 있습니다.', true); return; }
+    if (!state.guarantorAppointed) { setStatus('화이트런의 종사(Thane)로 임명되어야 하우스칼을 보증인으로 세울 수 있습니다.', true); return; }
+    if (!state.guarantorAlive) { setStatus('보증인이 사망하여 연대보증을 세울 수 없습니다.', true); return; }
+    sendAction('pledgeGuarantor', 0);
+  }
+
+  function releaseGuarantor() {
+    if (state.guarantorState !== 1) { setStatus('설정된 연대보증이 없습니다.', true); return; }
+    if (state.debt > 0) { setStatus('대출을 모두 갚아야 연대보증을 해제할 수 있습니다.', true); return; }
+    sendAction('releaseGuarantor', 0);
+  }
+
   function updateCollateral() {
     var owned = state.propertyOwned > 0;
     var st = state.propertyState;
@@ -1534,17 +1573,38 @@
     var fee = state.lienReleaseFee;
     var feeText = comma(fee) + ' G (감정가의 ' + state.lienFeePercent + '%)';
 
-    setText('colValTotal', comma(st === 1 ? state.propertyValue : 0) + ' G');
-    setText('colValTotalSub', st === 1 ? (name + ' 근저당 설정 중') : (st === 2 ? (name + ' 압류됨') : '근저당 설정 자산 없음'));
-    setText('colValLoanLine', '+' + comma(state.collateralCredit) + ' G');
+    var guarAppointed = state.guarantorAppointed > 0;
+    var guarAlive = state.guarantorAlive > 0;
+    var guarSt = state.guarantorState;
+    var guarName = state.guarantorName || '리디아';
+    var guarTitle = state.guarantorTitle || '화이트런 하우스칼';
+    var guarPotential = state.guarantorCreditAmount || 2000;
+    var guarCredit = (guarSt === 1 && guarAlive) ? (state.guarantorCredit || guarPotential) : 0;
+
+    var propActive = (st === 1);
+    var guarActive = (guarSt === 1 && guarAlive);
+    var totalCredit = (propActive ? state.collateralCredit : 0) + guarCredit;
+    var totalValue = (propActive ? state.propertyValue : 0) + (guarActive ? guarPotential : 0);
+    var activeCount = (propActive ? 1 : 0) + (guarActive ? 1 : 0);
+
+    setText('colValTotal', comma(totalValue) + ' G');
+    var subParts = [];
+    if (propActive) subParts.push(name + ' 근저당');
+    if (st === 2) subParts.push(name + ' 압류됨');
+    if (guarActive) subParts.push(guarName + ' 보증 중');
+    if (guarSt === 2) subParts.push(guarName + ' 구상권 청구');
+    setText('colValTotalSub', subParts.length > 0 ? (subParts.join(' · ') + ' 설정 중') : '설정된 담보 자산 없음');
+    setText('colValLoanLine', '+' + comma(totalCredit) + ' G');
     setText('colValLtv', '인정비율 ' + ltv + '% · 대출 탭 한도에 포함됩니다');
-    setText('colValCount', (st === 1 ? 1 : 0) + ' 건');
+    setText('colValCount', activeCount + ' 건');
     setText('colNavPropCount', owned ? '1' : '0');
+    setText('colNavGuarCount', guarAppointed ? '1' : '0');
     setText('propLtvBanner', '인정비율 ' + ltv + '%');
     setText('specLtv', ltv + '%');
     setText('specForeclose', '연체 ' + state.forecloseDays + '일');
     setText('specFee', '수수료 ' + state.lienFeePercent + '%');
 
+    // Property card
     setText('propValue', owned ? (comma(state.propertyValue) + ' G') : '—');
     setText('propCredit', owned ? (comma(potential) + ' G (' + ltv + '%)') : '—');
     setText('propForeclose', '연체 ' + state.forecloseDays + '일');
@@ -1586,6 +1646,56 @@
     if (releaseBtn) {
       releaseBtn.style.display = (st === 1) ? '' : 'none';
       releaseBtn.innerText = '근저당 해지 (수수료 ' + comma(fee) + ' G)';
+    }
+
+    // Guarantor card
+    setText('guarTitle', guarName + ' (' + (guarName === '리디아' ? 'Lydia' : guarName) + ')');
+    setText('guarBadge', guarTitle);
+    setText('guarRole', guarTitle);
+    setText('guarCredit', guarAppointed ? (comma(guarPotential) + ' G') : '—');
+    setText('guarForeclose', '연체 ' + state.forecloseDays + '일');
+    setText('guarCreditBanner', '보증 한도 +' + comma(guarPotential) + ' G');
+
+    var gPillText, gPillClass, gCardClass, gDesc, gWarn = '';
+    if (!guarAppointed && guarSt !== 2) {
+      gPillText = '자격 없음'; gPillClass = 'unregistered'; gCardClass = 'col-card';
+      gDesc = '화이트런의 정식 종사(Thane)로 임명되어 하우스칼을 하사받아야 연대보증을 세울 수 있습니다.';
+      gWarn = '⚔️ 발그루프 영주에게 종사 임명을 받고 하우스칼을 배속받으십시오.';
+    } else if (!guarAlive) {
+      gPillText = '사망'; gPillClass = 'seized'; gCardClass = 'col-card';
+      gDesc = '보증인 ' + guarName + '이(가) 사망하여 연대보증 효력이 상실되었습니다.';
+      gWarn = '⚠️ 사망한 보증인은 채무를 보증할 수 없습니다.';
+    } else if (guarSt === 1) {
+      gPillText = '보증 중'; gPillClass = 'active'; gCardClass = 'col-card pledged';
+      gDesc = guarTitle + ' ' + guarName + '이(가) 채무를 보증하고 있습니다. 대출 한도가 ' + comma(guarPotential) + ' G 늘어났습니다.';
+      gWarn = '⚠️ 연체 ' + state.forecloseDays + '일이 지나면 행정관이 보증인에게 구상권을 청구합니다. 대출을 모두 갚으면 보증을 해제할 수 있습니다.';
+    } else if (guarSt === 2) {
+      gPillText = '구상권 청구'; gPillClass = 'seized'; gCardClass = 'col-card';
+      gDesc = '연체로 행정관이 보증인 ' + guarName + '에게 구상권을 집행했습니다. 보증 효력이 정지되었습니다.';
+      gWarn = '⚠️ 대출을 전액 상환해야 보증인에 대한 추심이 해제되고 보증 효력이 복원됩니다.';
+    } else {
+      gPillText = '보증 가능'; gPillClass = 'available'; gCardClass = 'col-card available';
+      gDesc = guarTitle + ' ' + guarName + '을(를) 연대보증인으로 등록하면 대출 한도가 ' + comma(guarPotential) + ' G 늘어납니다.';
+      gWarn = '🛡️ 등록은 무료이며, 대출을 모두 상환하면 언제든 해제할 수 있습니다.';
+    }
+
+    var gPill = document.getElementById('guarPill');
+    if (gPill) { gPill.innerText = gPillText; gPill.className = 'col-status-pill ' + gPillClass; }
+    var gCard = document.getElementById('guarCard');
+    if (gCard) { gCard.className = gCardClass; }
+    setText('guarDesc', gDesc);
+    var gWarnEl = document.getElementById('guarWarning');
+    if (gWarnEl) { gWarnEl.innerText = gWarn; gWarnEl.style.display = gWarn ? '' : 'none'; }
+
+    var gPledgeBtn = document.getElementById('guarPledgeBtn');
+    var gReleaseBtn = document.getElementById('guarReleaseBtn');
+    if (gPledgeBtn) {
+      gPledgeBtn.style.display = (guarSt === 1 || guarSt === 2) ? 'none' : '';
+      gPledgeBtn.disabled = !(guarAppointed && guarAlive && guarSt === 0);
+    }
+    if (gReleaseBtn) {
+      gReleaseBtn.style.display = (guarSt === 1) ? '' : 'none';
+      gReleaseBtn.innerText = '연대보증 해제 (수수료 없음)';
     }
   }
 
@@ -2120,7 +2230,14 @@
       if (data.lienReleaseFee !== undefined) { state.lienReleaseFee = data.lienReleaseFee; }
       if (data.lienFeePercent !== undefined) { state.lienFeePercent = data.lienFeePercent; }
       if (data.propertyLocked !== undefined) { state.propertyLocked = data.propertyLocked; }
-      if (data.propertyOwned !== undefined || data.propertyState !== undefined) { updateCollateral(); }
+      if (data.guarantorAppointed !== undefined) { state.guarantorAppointed = data.guarantorAppointed; }
+      if (data.guarantorAlive !== undefined) { state.guarantorAlive = data.guarantorAlive; }
+      if (data.guarantorState !== undefined) { state.guarantorState = data.guarantorState; }
+      if (data.guarantorCredit !== undefined) { state.guarantorCredit = data.guarantorCredit; }
+      if (data.guarantorCreditAmount !== undefined) { state.guarantorCreditAmount = data.guarantorCreditAmount; }
+      if (data.guarantorName !== undefined) { state.guarantorName = data.guarantorName; }
+      if (data.guarantorTitle !== undefined) { state.guarantorTitle = data.guarantorTitle; }
+      if (data.propertyOwned !== undefined || data.propertyState !== undefined || data.guarantorState !== undefined || data.guarantorAppointed !== undefined) { updateCollateral(); }
 
       // Each activity keeps its own book, so a figure is always explained by the
       // lines directly beneath it rather than in a separate combined ledger.

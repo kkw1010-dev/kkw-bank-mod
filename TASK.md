@@ -68,6 +68,7 @@ Papyrus 로깅은 켜져 있다. 크래시 로그는 CrashLoggerSSE가 `SKSE\cra
 - **신용등급 전체** — 아래 "신용등급" 절의 12개 판정이 인게임에서 실제로 도는지.
   UI 쪽은 12개 등급 전부를 브라우저에서 넣어보고 확인했지만, 그 등급을 만들어내는
   Papyrus 판정은 게임 안에서만 확인할 수 있다
+- **연대보증 (화이트런: 리디아)** — 세인 임명(`IsThaneOf(0)`) 시 활성화, 보증 설정(`BankGuarantorWhiterun=1`) 시 대출한도 +2,000G, 전액 상환 시 해제 가능, 연체 7일 시 구상권 청구(`BankGuarantorWhiterun=2`) 및 완납 시 원복. 리디아 사망 시 무효. 인게임 동작 확인 전
 - **홀드별 문양·초상화가 게임 안에서 뜨는지** — 파일명을 ASCII로 바꾼 뒤 아직
   게임에서 보지 않았다. 초상화 폴백(`onerror`)도 마찬가지
 
@@ -167,11 +168,12 @@ UI는 `BankView.html`의 `SEAT_TEXT`로 홀드별로 덮어쓰므로 공용 문�
 
 ### 2. 담보의 나머지 두 갈래
 
-부동산은 게임과 연결되었고 현물·보증인은 탭에 "준비 중"으로만 있다. 조사 결과:
+부동산과 보증인은 게임과 연결되었고 현물은 탭에 "준비 중"으로 남아 있다. 조사 및 구현 결과:
 
-- **보증인** — 리디아(`HousecarlWhiterun`)는 처음부터 `PlayerHousecarlFaction`과
-  `PlayerFaction` 소속이라 팩션으로는 임명 여부를 알 수 없다(`dotnet run -- factions
-  HousecarlWhiterun`). 이미 쓰는 화이트런 세인 판정을 조건으로 쓰면 된다
+- **보증인** — 화이트런 리디아(`HousecarlWhiterun`) 구현 완료(빌드 검증). 처음부터
+  `PlayerHousecarlFaction`과 `PlayerFaction` 소속이라 팩션으로는 임명 여부를 알 수 없어,
+  화이트런 세인 판정(`IsThaneOf(0)`)을 조건으로 쓴다. 보증 시 2,000G 한도 증액,
+  연체 7일 시 구상권 청구, 완납 시 원복. 리디아 사망 시 무효
 - **현물** — 숨은 보관 상자를 바닐라 상자 창으로 열고, 닫힐 때 SKSE `GetNumItems` /
   `GetNthForm` / `GetGoldValue`로 합산한다. 외상과 같은 모양이라 같은 크래시 위험을 안는다.
   `GetGoldValue`는 기본값이라 인챈트·개량분은 잡히지 않는다
@@ -229,6 +231,9 @@ UI의 "채권 매각" 버튼은 지금 안내 문구만 띄운다. 대상 모드
 - **집에 대한 사실은 저장하지 않고 바닐라에서 읽는다.** 소유 여부는
   `HousePurchaseScript.WhiterunHouseVar`(바닐라 하스파이어도 이것으로 판정), 감정가는
   `HPWhiterun`, 셀은 구입 프래그먼트 스크립트의 `WhiterunHouse`
+- **연대보증은 하우스칼이 서고, 한도를 더한다.** 화이트런은 리디아(`000A2C94`). 세인 임명(`IsThaneOf(0)`) 시 자격 획득, 기본 2,000 골드 증액(`BankGuarantorCreditWhiterun`). 별도 보증 수수료는 없다.
+- **리디아는 처음부터 플레이어 팩션 소속이다.** 팩션 검사로는 세인/하우스칼 배속 여부를 알 수 없으므로 바닐라 `FavorJarlsMakeFriendsScript.IsThaneOf(0)`로 판정한다.
+- **연체 7일 시 구상권 청구.** 압류와 같은 날(`BankForecloseOverdueDays`)에 보증 상태가 2(구상권 청구)로 전환된다. 대출을 전액 상환하면 정상 보증(1)으로 복원된다. 보증 해지는 대출이 완전히 없을 때만 가능하다.
 
 ## 진단 도구
 

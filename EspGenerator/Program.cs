@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 using System.Linq;
 using System.Collections.Generic;
@@ -970,7 +970,7 @@ namespace EspGenerator
                     var parent = ctx.Parent;
                     while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
                     var cell = parent?.Record as ICellGetter;
-                    Console.WriteLine($"  {npcEdid,-24} ref={ctx.Record.FormKey.ID:X8}  cell={cell?.EditorID ?? "(exterior/none)"} {cell?.FormKey.ID:X6}");
+                    Console.WriteLine($"  {npcEdid,-24} ref={ctx.Record.FormKey.ID:X8}  cell={cell?.EditorID ?? "(exterior/none)"} {cell?.FormKey.ID:X6} persistent={ctx.Record.MajorRecordFlagsRaw & 0x400}");
                 }
                 return;
             }
@@ -1151,6 +1151,8 @@ namespace EspGenerator
             const uint IdCollateralLtv   = 0x8E0;  // share of the appraisal lent against, percent
             const uint IdForecloseDays   = 0x8E1;  // days overdue before a pledged house is seized
             const uint IdLienFeePct      = 0x8E2;  // fee to release a lien, percent of the appraisal
+            const uint IdGuarantorCredit = 0x8E3;  // loan credit granted by a housecarl guarantor
+            const uint IdGuarantorPledgeBase = 0x8F0; // per hold: 0 none, 1 pledged, 2 claimed/defaulted
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
@@ -1256,6 +1258,12 @@ namespace EspGenerator
             var collateralLtv = NewGlobal(IdCollateralLtv, "BankCollateralLtvPercent", 60f);
             var forecloseDays = NewGlobal(IdForecloseDays, "BankForecloseOverdueDays", 7f);
             var lienFeePct = NewGlobal(IdLienFeePct, "BankLienReleaseFeePercent", 20f);
+
+            // Joint surety / Guarantor. For Whiterun, Lydia (HousecarlWhiterun).
+            var guarantorPledges = new List<GlobalFloat>();
+            for (uint i = 0; i < holds.Length; i++)
+                guarantorPledges.Add(NewGlobal(IdGuarantorPledgeBase + i, "BankGuarantor" + holds[i].name));
+            var guarantorCredit = NewGlobal(IdGuarantorCredit, "BankGuarantorCreditWhiterun", 2000f);
 
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
             // Charged per DAY overdue, on the original sum. A weekly charge left the
@@ -1527,6 +1535,8 @@ namespace EspGenerator
             ObjProp("CollateralLtv", collateralLtv.FormKey);
             ObjProp("ForecloseDays", forecloseDays.FormKey);
             ObjProp("LienReleaseFeePercent", lienFeePct.FormKey);
+            ListProp("GuarantorPledges", guarantorPledges);
+            ObjProp("GuarantorCredit", guarantorCredit.FormKey);
 
             // ---- Standing: the records each tier is actually read from -----------------
             // Every id below was read out of Skyrim.esm with the probes in this file, not
@@ -1560,6 +1570,8 @@ namespace EspGenerator
             // Breezehome's front door in Whiterun: persistent, teleports to 000166A9 inside
             // WhiterunBreezehome. Read with `dotnet run -- doors WhiterunBreezehome`.
             ObjProp("BreezehomeFrontDoor", Vanilla(0x01A6F9));
+            // Whiterun Housecarl (Lydia): placed reference ACHR 000A2C94.
+            ObjProp("HousecarlWhiterun", Vanilla(0x0A2C94));
 
             ObjProp("Gold001", Gold001);
 
