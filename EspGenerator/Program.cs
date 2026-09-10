@@ -878,6 +878,30 @@ namespace EspGenerator
                 return;
             }
 
+            // Placed references of an NPC - the id `player.moveto` and `prid` take in the
+            // console - with the cell they stand in. Console instructions should quote an
+            // id read from the plugin, never one remembered.
+            if (args.Length > 1 && args[0] == "refs")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var cache = esm.ToImmutableLinkCache();
+                var wantedNpcs = esm.Npcs
+                    .Where(n => (n.EditorID ?? "").IndexOf(args[1], StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (n.Name?.String ?? "").IndexOf(args[1], StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ToDictionary(n => n.FormKey, n => n.EditorID ?? "");
+                foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedNpc, IPlacedNpcGetter>(cache))
+                {
+                    var baseKey = ctx.Record.Base.FormKeyNullable;
+                    if (baseKey is not FormKey bk || !wantedNpcs.TryGetValue(bk, out var npcEdid)) continue;
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    var cell = parent?.Record as ICellGetter;
+                    Console.WriteLine($"  {npcEdid,-24} ref={ctx.Record.FormKey.ID:X8}  cell={cell?.EditorID ?? "(exterior/none)"} {cell?.FormKey.ID:X6}");
+                }
+                return;
+            }
+
             // NPCs that belong to every faction named (comma separated EditorIDs), so an AND
             // of GetInFaction conditions can be checked against who it would really reach.
             if (args.Length > 1 && args[0] == "members")

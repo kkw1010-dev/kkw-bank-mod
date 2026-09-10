@@ -1099,20 +1099,33 @@ EndFunction
 ; The vanilla courier carries them: a letter goes into its container and it finds the
 ; player in the next town. A daily check runs only while a loan is outstanding and
 ; stops itself once the ledger is clear.
+; Game time at which the pending dunning check is due. A plain script variable, not a
+; property, so it changes nothing in the save format; a save that predates it reads
+; 0.0, which EnsureDunningRun takes to mean no check is pending.
+Float NextDunningCheckAt = 0.0
+
+; The interval is in game HOURS - Form.psc: "in afInterval hours of game time". It was
+; 1.0, so an overdue loan put a letter in the courier's bag every game hour while the
+; trace beside it claimed a day. Seven letters, one per day overdue, need one check a
+; day.
 Function ScheduleDunningRun()
-    RegisterForSingleUpdateGameTime(1.0)
-    Trace("dunning: armed, next check in one game day")
+    RegisterForSingleUpdateGameTime(24.0)
+    NextDunningCheckAt = Utility.GetCurrentGameTime() + 1.0
+    Trace("dunning: armed, next check in 24 game hours")
 EndFunction
 
-; Re-arms the daily check whenever a loan is outstanding. A game-time registration
-; does not survive the script being replaced, and Borrow() was the only place that
-; ever made one, so any rebuild between sessions left the courier silent for the
-; rest of the playthrough - and silent is exactly what a mod with no outstanding
-; loan looks like, which is why it went unnoticed. Cheap to call: at most one
-; registration a game day, and OnUpdateGameTime drops the chain once the ledger
-; is clear.
+; Re-arms the daily check when a loan is outstanding and no check is pending. A
+; game-time registration does not survive the script being replaced, and Borrow() was
+; once the only place that made one, so a rebuild between sessions silenced the
+; courier for the rest of the playthrough. But a single-update registration also
+; replaces whatever was pending, so re-arming on every bank visit would push the check
+; back a day each time, and a player who opens the bank daily would never get a
+; letter. Re-arm only when the check that should already have run has not.
 Function EnsureDunningRun()
-    If AnyLoanOutstanding()
+    If !AnyLoanOutstanding()
+        Return
+    EndIf
+    If Utility.GetCurrentGameTime() > NextDunningCheckAt + (2.0 / 24.0)
         ScheduleDunningRun()
     EndIf
 EndFunction
@@ -1166,7 +1179,10 @@ Event OnUpdateGameTime()
         ; is, but it neither accrues nor sends letters the player could not answer.
         If HoldIsEnabled(i)
             AccrueOverdue(i)
-            If IsOverdue(i)
+            ; Letter N is written for day N overdue - day three's says 사흘째 - so none
+            ; goes out on the due date itself. Before, day one's letter arrived twice:
+            ; once at zero days overdue, clamped up to one, and again at one.
+            If IsOverdue(i) && GetOverdueDays(i) >= 1
                 SendDunningLetter(i)
                 overdueHolds += 1
             EndIf
