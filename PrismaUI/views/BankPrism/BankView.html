@@ -622,6 +622,15 @@
       background: rgba(212, 175, 55, 0.15);
       border: 1px solid var(--gold);
     }
+    .col-status-pill.seized {
+      color: var(--bad);
+      background: rgba(220, 90, 90, 0.15);
+      border: 1px solid var(--bad);
+    }
+    .col-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
     .col-status-pill.unregistered {
       color: var(--muted);
       background: rgba(255, 255, 255, 0.05);
@@ -1071,261 +1080,84 @@
             </div>
           </div>
 
-          <!-- 담보 -->
+          <!-- 담보: 지금은 부동산만 게임과 연결되어 있다 -->
           <div class="panel" id="panel-collateral">
-            <!-- 요약 KPI 바 -->
             <div class="col-summary-row">
               <div class="col-summary-box">
-                <div class="col-summary-label">총 담보 평가액</div>
-                <div class="col-summary-val gold" id="colValTotal">27,500 G</div>
-                <div class="col-summary-sub">영지 공증 완료 자산 가치 합계</div>
+                <div class="col-summary-label">저당 잡힌 자산 감정가</div>
+                <div class="col-summary-val gold" id="colValTotal">— G</div>
+                <div class="col-summary-sub" id="colValTotalSub">게임에서 아직 정보가 오지 않았습니다</div>
               </div>
               <div class="col-summary-box">
-                <div class="col-summary-label">담보 대출 한도 (LTV 60%)</div>
-                <div class="col-summary-val good" id="colValLoanLine">+16,500 G</div>
-                <div class="col-summary-sub">대출 탭 한도에 즉시 증액 반영</div>
+                <div class="col-summary-label">담보로 늘어난 대출 한도</div>
+                <div class="col-summary-val good" id="colValLoanLine">— G</div>
+                <div class="col-summary-sub" id="colValLtv">대출 탭 한도에 포함됩니다</div>
               </div>
               <div class="col-summary-box">
                 <div class="col-summary-label">설정 자산 건수</div>
-                <div class="col-summary-val" id="colValCount">5 건</div>
-                <div class="col-summary-sub">현물 3 · 보증 1 · 부동산 1</div>
+                <div class="col-summary-val" id="colValCount">— 건</div>
+                <div class="col-summary-sub">부동산 운영 중 · 현물·보증인 준비 중</div>
               </div>
             </div>
 
-            <!-- 서브 카테고리 네비게이션: 현물 / 보증인 / 부동산 -->
             <div class="col-nav-bar">
-              <button class="col-nav-btn active" id="col-btn-goods" onclick="showCollateralSub('goods')">
+              <button class="col-nav-btn active" id="col-btn-property" onclick="showCollateralSub('property')">
+                <span class="col-icon">🏰</span>
+                <span>부동산 저당</span>
+                <span class="col-nav-count" id="colNavPropCount">—</span>
+              </button>
+              <button class="col-nav-btn" id="col-btn-goods" onclick="showCollateralSub('goods')">
                 <span class="col-icon">💎</span>
                 <span>현물 담보</span>
-                <span class="col-nav-count">3</span>
+                <span class="col-nav-count">준비 중</span>
               </button>
               <button class="col-nav-btn" id="col-btn-guarantor" onclick="showCollateralSub('guarantor')">
                 <span class="col-icon">🛡️</span>
                 <span>보증인 연대</span>
-                <span class="col-nav-count">2</span>
-              </button>
-              <button class="col-nav-btn" id="col-btn-property" onclick="showCollateralSub('property')">
-                <span class="col-icon">🏰</span>
-                <span>부동산 저당</span>
-                <span class="col-nav-count">2</span>
+                <span class="col-nav-count">준비 중</span>
               </button>
             </div>
 
-            <!-- 1. 현물 담보 서브 뷰 -->
-            <div class="col-sub-view active" id="col-view-goods">
+            <div class="col-sub-view active" id="col-view-property">
               <div class="col-banner">
-                <span>📦 <b>영지 금고 위탁 귀중품</b>: 보석류, 귀금속 주괴, 공인 아티팩트를 금고에 물리 위탁하여 즉시 한도를 산정받습니다.</span>
-                <span style="font-size: 13px; color: var(--gold);">인정비율 60%</span>
+                <span>🏰 <b>부동산 저당</b>: 소유한 집을 드래곤스리치 금고에 저당 잡히면, 감정가의 일부만큼 대출 한도가 늘어납니다.</span>
+                <span style="font-size: 13px; color: var(--gold);" id="propLtvBanner">인정비율 —%</span>
               </div>
 
-              <!-- 현물 카드 1 -->
-              <div class="col-card pledged">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">💎</span>
-                    <span class="col-card-title">완벽한 다이아몬드 (Flawless Diamond) × 2</span>
-                    <span class="col-badge goods">보석류</span>
-                  </div>
-                  <span class="col-status-pill active">금고 위탁 완료</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>시장 평가액 <b>2,000 G</b></span>
-                  <span class="highlight">담보 인정액 <b>1,200 G (60%)</b></span>
-                  <span>위탁 번호 <b>WH-GEM-014</b></span>
-                </div>
-                <div class="col-card-desc">
-                  화이트런 궁정 보석 세공사의 정품 각인이 완료된 최고 순도 무결점 다이아몬드입니다. 드래곤스리치 금고 특수 격실에 보관 중입니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn secondary" onclick="clickCollateralAction('완벽한 다이아몬드 위탁 보관증(WH-GEM-014)이 정상 확인되었습니다.')">보관증 확인</button>
-                  <button class="col-btn primary" onclick="clickCollateralAction('대출 전액 상환 후 금고에서 위탁 물품을 회수할 수 있습니다.')">회수 신청</button>
-                </div>
-              </div>
-
-              <!-- 현물 카드 2 -->
-              <div class="col-card pledged">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">⛏️</span>
-                    <span class="col-card-title">에보니 주괴 묶음 (Ebony Ingots) × 10</span>
-                    <span class="col-badge goods">전략 금속</span>
-                  </div>
-                  <span class="col-status-pill active">금고 위탁 완료</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>시장 평가액 <b>1,500 G</b></span>
-                  <span class="highlight">담보 인정액 <b>900 G (60%)</b></span>
-                  <span>위탁 번호 <b>WH-ING-088</b></span>
-                </div>
-                <div class="col-card-desc">
-                  나린달 광산 출하 공인 제련소의 순도 검증 인장이 날인된 에보니 주괴 묶음입니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn secondary" onclick="clickCollateralAction('에보니 주괴 묶음 위탁 보관증(WH-ING-088)이 확인되었습니다.')">보관증 확인</button>
-                  <button class="col-btn primary" onclick="clickCollateralAction('대출 전액 상환 후 금고에서 위탁 물품을 회수할 수 있습니다.')">회수 신청</button>
-                </div>
-              </div>
-
-              <!-- 현물 카드 3 -->
-              <div class="col-card pledged">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">👑</span>
-                    <span class="col-card-title">드래곤 프리스트 가면: 크로시스 (Krosis)</span>
-                    <span class="col-badge goods">고대 유물</span>
-                  </div>
-                  <span class="col-status-pill active">특수 결계 보관</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>시장 평가액 <b>8,000 G</b></span>
-                  <span class="highlight">담보 인정액 <b>4,800 G (60%)</b></span>
-                  <span>위탁 번호 <b>WH-ART-002</b></span>
-                </div>
-                <div class="col-card-desc">
-                  시어포인트에서 발굴된 전설적인 유물. 궁정 마법사 파렌가 시크릿-파이어의 마법 감정 및 봉인 결계 보관이 완료되었습니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn secondary" onclick="clickCollateralAction('크로시스 가면의 마법 봉인 상태가 완벽하게 유지되고 있습니다.')">결계 점검</button>
-                  <button class="col-btn primary" onclick="clickCollateralAction('고대 아티팩트는 모든 채무 변제 시 야를의 입회하에 반환됩니다.')">회수 신청</button>
-                </div>
-              </div>
-
-              <!-- 추가 등록 박스 -->
-              <div class="col-register-box" onclick="clickCollateralAction('인벤토리 내 담보 등록 가능한 귀중품(보석/주괴/아티팩트)을 조회합니다.')">
-                <div class="col-register-text">+ 인벤토리 귀중품 담보 추가 위탁 등록</div>
-                <div class="col-register-sub">보석, 귀금속 주괴, 드래곤 프리스트 가면 등을 금고에 위탁하여 한도를 증액합니다.</div>
-              </div>
-            </div>
-
-            <!-- 2. 보증인 담보 서브 뷰 -->
-            <div class="col-sub-view" id="col-view-guarantor">
-              <div class="col-banner">
-                <span>🛡️ <b>인적 연대 보증</b>: 종사 호위무사(하우스칼) 또는 명망 높은 팩션 간부의 명예와 신용을 담보로 설정합니다.</span>
-                <span style="font-size: 13px; color: var(--gold);">신용 연대 보증</span>
-              </div>
-
-              <!-- 보증인 카드 1: 리디아 -->
-              <div class="col-card pledged">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">🗡️</span>
-                    <span class="col-card-title">리디아 (Lydia)</span>
-                    <span class="col-badge guarantor">종사 하우스칼</span>
-                  </div>
-                  <span class="col-status-pill active">연대보증 유효</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>연대 보증 한도 <b style="color: var(--gold);">+5,000 G</b></span>
-                  <span>보증 등급 <b>영지 최고 신용 (1순위)</b></span>
-                  <span>공증 일자 <b>제4시대 201년</b></span>
-                </div>
-                <div class="col-quote-box">
-                  "영주님의 칙령에 따라, 제 목숨과 검을 걸고 당신의 채무를 전액 보증합니다. 제 맹세는 흔들리지 않습니다."
-                </div>
-                <div class="col-card-desc">
-                  화이트런 영주 발그루프가 임명한 공식 가신. 종사 호위무사의 영지 내 공인 보증력이 적용되어 최고 등급의 한도가 보증됩니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn secondary" onclick="clickCollateralAction('리디아의 종사 호위무사 연대보증 서약서가 영지 공증 장부에 등재되어 있습니다.')">보증 서약서 열람</button>
-                </div>
-              </div>
-
-              <!-- 보증인 카드 2: 에일라 (계약 대기/가능 상태) -->
-              <div class="col-card available">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">🏹</span>
-                    <span class="col-card-title">사냥꾼 에일라 (Aela the Huntress)</span>
-                    <span class="col-badge guarantor">컴패니언즈 서클</span>
-                  </div>
-                  <span class="col-status-pill available">보증 계약 가능</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>예상 보증 한도 <b style="color: var(--gold);">+4,500 G</b></span>
-                  <span>자격 <b>요르바스크 핵심 서클</b></span>
-                  <span>신뢰도 <b>우수 (동료)</b></span>
-                </div>
-                <div class="col-quote-box">
-                  "도망칠 생각은 마. 만약 네가 빚을 떼먹어서 내 이름에 먹칠을 하면, 내가 직접 널 사냥할 테니까."
-                </div>
-                <div class="col-card-desc">
-                  요르바스크 핵심 서클 전사의 명성을 바탕으로 한 전사 조합 연대보증이 가능합니다. 체결 시 즉시 한도가 확장됩니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn primary" onclick="clickCollateralAction('에일라와의 연대보증 계약 서류가 영지 공증관에게 제출 대기 중입니다.')">연대보증 계약 체결</button>
-                </div>
-              </div>
-
-              <!-- 추가 등록 박스 -->
-              <div class="col-register-box" onclick="clickCollateralAction('동행 중인 영지 가신이나 팩션 핵심 동료를 공증인 앞에 출석시켜 연대보증인으로 등재할 수 있습니다.')">
-                <div class="col-register-text">+ 신규 동료/가신 보증인 심사 신청</div>
-                <div class="col-register-sub">친밀도가 높은 동료 또는 팩션 간부를 공증인 앞에 출석시켜 연대보증 한도를 증액합니다.</div>
-              </div>
-            </div>
-
-            <!-- 3. 부동산 담보 서브 뷰 -->
-            <div class="col-sub-view" id="col-view-property">
-              <div class="col-banner">
-                <span>🏰 <b>영지 공인 부동산 근저당</b>: 야를에게 공인받은 가옥과 대저택의 소유권 문서를 금고에 공증 저당합니다.</span>
-                <span style="font-size: 13px; color: var(--gold);">근저당 LTV 60%</span>
-              </div>
-
-              <!-- 부동산 카드 1: 브리즈홈 -->
-              <div class="col-card pledged">
+              <div class="col-card" id="propCard">
                 <div class="col-card-head">
                   <div class="col-card-title-grp">
                     <span class="col-icon">🏡</span>
-                    <span class="col-card-title">브리즈홈 (Breezehome)</span>
-                    <span class="col-badge property">화이트런 평원지구</span>
+                    <span class="col-card-title" id="propTitle">브리즈홈 (Breezehome)</span>
+                    <span class="col-badge property">화이트런</span>
                   </div>
-                  <span class="col-status-pill active">근저당 1순위 설정</span>
+                  <span class="col-status-pill unregistered" id="propPill">정보 없음</span>
                 </div>
                 <div class="col-card-metrics">
-                  <span>공인 감정가 <b>16,000 G</b></span>
-                  <span class="highlight">담보 대출 한도 <b>9,600 G (60%)</b></span>
-                  <span>등기 <b>화이트런 제1호</b></span>
+                  <span>감정가 <b id="propValue">—</b></span>
+                  <span class="highlight">담보 인정액 <b id="propCredit">—</b></span>
+                  <span>압류 기준 <b id="propForeclose">—</b></span>
                 </div>
-                <div class="col-card-desc">
-                  화이트런 성문 인근 복층 가옥 (연금술 실험실 및 가구 증축 완료). 드래곤스리치 금고에 제1순위 근저당권이 설정되어 있습니다.
-                </div>
-                <div class="grade-warning-badge" style="margin-top: 4px; margin-bottom: 8px;">
-                  ⚠️ <b>채무 불이행 특약:</b> 대출 만기 후 연체 30일 초과 시, 행정관 프로벤투스의 집행 아래 즉시 강제 경매 공매 처분 공고가 발령됩니다.
-                </div>
+                <div class="col-card-desc" id="propDesc">게임에서 아직 정보가 오지 않았습니다.</div>
+                <div class="grade-warning-badge" id="propWarning" style="display: none; margin-top: 4px; margin-bottom: 8px;"></div>
                 <div class="col-action-row">
-                  <button class="col-btn secondary" onclick="clickCollateralAction('브리즈홈 제1순위 근저당권 설정 등기부 등본이 정상 확인되었습니다.')">등기부 등본 열람</button>
+                  <button class="col-btn primary" id="propPledgeBtn" onclick="pledgeProperty()">저당 잡히기</button>
+                  <button class="col-btn secondary" id="propReleaseBtn" onclick="releaseProperty()" style="display: none;">저당 풀기</button>
                 </div>
-              </div>
-
-              <!-- 부동산 카드 2: 헬야첸 홀 -->
-              <div class="col-card available">
-                <div class="col-card-head">
-                  <div class="col-card-title-grp">
-                    <span class="col-icon">🏰</span>
-                    <span class="col-card-title">헬야첸 홀 (Heljarchen Hall)</span>
-                    <span class="col-badge property">페일 영지 대저택</span>
-                  </div>
-                  <span class="col-status-pill available">소유권 확인 · 저당 미설정</span>
-                </div>
-                <div class="col-card-metrics">
-                  <span>공인 감정가 <b>25,000 G</b></span>
-                  <span class="highlight">담보 가능 한도 <b>15,000 G (60%)</b></span>
-                  <span>상태 <b>등기 신청 대기</b></span>
-                </div>
-                <div class="col-card-desc">
-                  페일 영지 영주에게 정식 매입하여 자가 축조한 3층 대저택 및 무기고/연금술 탑. 현재 저당권 미설정 상태로 즉시 대규모 한도 설정이 가능합니다.
-                </div>
-                <div class="col-action-row">
-                  <button class="col-btn primary" onclick="clickCollateralAction('헬야첸 홀 근저당권 설정 등기 신청서가 접수되었습니다.')">근저당권 설정 등기</button>
-                </div>
-              </div>
-
-              <!-- 추가 등록 박스 -->
-              <div class="col-register-box" onclick="clickCollateralAction('타 영지(솔리튜드 프라우드스파이어, 리프튼 허니사이드 등)의 가옥 매매 계약서를 공증인에게 제출합니다.')">
-                <div class="col-register-text">+ 타 영지 가옥/토지 매매 계약서 공증 제출</div>
-                <div class="col-register-sub">스카이림 각 영지에서 매입한 주택이나 장원 토지의 소유권 증서를 제출하여 담보를 설정합니다.</div>
               </div>
             </div>
 
+            <div class="col-sub-view" id="col-view-goods">
+              <div class="col-banner">
+                <span>💎 <b>현물 담보</b>: 준비 중입니다. 귀중품을 금고에 맡기고 한도를 받는 기능이 들어갈 자리입니다.</span>
+              </div>
+            </div>
+
+            <div class="col-sub-view" id="col-view-guarantor">
+              <div class="col-banner">
+                <span>🛡️ <b>보증인 연대</b>: 준비 중입니다. 종사의 하우스칼이 채무를 보증하는 기능이 들어갈 자리입니다.</span>
+              </div>
+            </div>
           </div>
 
           <!-- 신용등급 심사 및 트래킹 탭 -->
@@ -1545,10 +1377,10 @@
                 법적 절차에 따라 총괄 관리합니다.
               </div>
               <div class="col-side-specs">
-                <div class="col-spec-item"><span class="col-spec-lbl">담보 인정 비율 (LTV)</span><span class="col-spec-val">최대 60%</span></div>
-                <div class="col-spec-item"><span class="col-spec-lbl">현물 수탁 보관료</span><span class="col-spec-val">전액 면제</span></div>
-                <div class="col-spec-item"><span class="col-spec-lbl">채무 불이행 조치</span><span class="col-spec-val">30일 후 압류 공매</span></div>
-                <div class="col-spec-item"><span class="col-spec-lbl">공증 수수료</span><span class="col-spec-val">금고 전액 지원</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">담보 인정 비율</span><span class="col-spec-val" id="specLtv">—</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">압류 기준</span><span class="col-spec-val" id="specForeclose">—</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">압류 해제</span><span class="col-spec-val">대출 완납 시</span></div>
+                <div class="col-spec-item"><span class="col-spec-lbl">저당 해제</span><span class="col-spec-val">대출이 없을 때</span></div>
               </div>
             </div>
 
@@ -1573,6 +1405,8 @@
     loanLimit: 0, creditLimit: 0, loanDaysLeft: 0, overdueDays: 0,
     hold: '화이트런', holdKey: 'whiterun', grade: '정체모를 용병', tier: 2,
     paths: 1, pathList: '',
+    propertyOwned: 0, propertyState: 0, propertyValue: 0, collateralCredit: 0,
+    ltv: 60, forecloseDays: 7, propertyName: '',
     received: false
   };
   var amount = 0;
@@ -1658,10 +1492,10 @@
     }
   }
 
-  var currentColSub = 'goods';
+  var currentColSub = 'property';
   function showCollateralSub(cat) {
     currentColSub = cat;
-    var cats = ['goods', 'guarantor', 'property'];
+    var cats = ['property', 'goods', 'guarantor'];
     for (var i = 0; i < cats.length; i++) {
       var c = cats[i];
       var btn = document.getElementById('col-btn-' + c);
@@ -1671,8 +1505,74 @@
     }
   }
 
-  function clickCollateralAction(msg) {
-    setStatus(msg, false);
+  /* Property collateral. Papyrus owns every rule; these guards only give the reason
+     without a round trip. States: 0 not pledged, 1 pledged, 2 seized. */
+  function pledgeProperty() {
+    if (!(state.propertyOwned > 0)) { setStatus('저당 잡힐 집이 없습니다.', true); return; }
+    if (state.propertyState === 2) { setStatus('압류된 집은 저당 잡힐 수 없습니다.', true); return; }
+    if (state.propertyState === 1) { setStatus('이미 저당 잡혀 있습니다.', true); return; }
+    sendAction('pledgeProperty', 0);
+  }
+
+  function releaseProperty() {
+    if (state.propertyState !== 1) { setStatus('저당 잡힌 집이 없습니다.', true); return; }
+    if (state.debt > 0) { setStatus('대출을 모두 갚아야 저당을 풀 수 있습니다.', true); return; }
+    sendAction('releaseProperty', 0);
+  }
+
+  function updateCollateral() {
+    var owned = state.propertyOwned > 0;
+    var st = state.propertyState;
+    var ltv = state.ltv;
+    var name = state.propertyName || '집';
+    var potential = Math.floor(state.propertyValue * ltv / 100);
+
+    setText('colValTotal', comma(st === 1 ? state.propertyValue : 0) + ' G');
+    setText('colValTotalSub', st === 1 ? (name + ' 저당 중') : (st === 2 ? (name + ' 압류됨') : '저당 잡힌 자산 없음'));
+    setText('colValLoanLine', '+' + comma(state.collateralCredit) + ' G');
+    setText('colValLtv', '인정비율 ' + ltv + '% · 대출 탭 한도에 포함됩니다');
+    setText('colValCount', (st === 1 ? 1 : 0) + ' 건');
+    setText('colNavPropCount', owned ? '1' : '0');
+    setText('propLtvBanner', '인정비율 ' + ltv + '%');
+    setText('specLtv', ltv + '%');
+    setText('specForeclose', '연체 ' + state.forecloseDays + '일');
+
+    setText('propValue', owned ? (comma(state.propertyValue) + ' G') : '—');
+    setText('propCredit', owned ? (comma(potential) + ' G (' + ltv + '%)') : '—');
+    setText('propForeclose', '연체 ' + state.forecloseDays + '일');
+
+    var pillText, pillClass, cardClass, desc, warn = '';
+    if (!owned && st !== 2) {
+      pillText = '미보유'; pillClass = 'unregistered'; cardClass = 'col-card';
+      desc = name + '을 구입하면 저당 잡힐 수 있습니다.';
+    } else if (st === 1) {
+      pillText = '저당 중'; pillClass = 'active'; cardClass = 'col-card pledged';
+      desc = '대출을 모두 갚은 뒤에 저당을 풀 수 있습니다.';
+      warn = '⚠️ 연체 ' + state.forecloseDays + '일이 지나면 행정관이 ' + name + '을 압류합니다. 압류되면 집의 소유권이 화이트런 영지로 넘어가고, 대출을 모두 갚아야 돌아옵니다.';
+    } else if (st === 2) {
+      pillText = '압류'; pillClass = 'seized'; cardClass = 'col-card';
+      desc = '연체로 행정관이 ' + name + '을 압류했습니다.';
+      warn = '⚠️ 대출을 모두 갚으면 압류가 풀리고 소유권이 돌아옵니다.';
+    } else {
+      pillText = '저당 가능'; pillClass = 'available'; cardClass = 'col-card available';
+      desc = name + '을 저당 잡히면 대출 한도가 ' + comma(potential) + ' G 늘어납니다.';
+    }
+
+    var pill = document.getElementById('propPill');
+    if (pill) { pill.innerText = pillText; pill.className = 'col-status-pill ' + pillClass; }
+    var card = document.getElementById('propCard');
+    if (card) { card.className = cardClass; }
+    setText('propDesc', desc);
+    var warnEl = document.getElementById('propWarning');
+    if (warnEl) { warnEl.innerText = warn; warnEl.style.display = warn ? '' : 'none'; }
+
+    var pledgeBtn = document.getElementById('propPledgeBtn');
+    var releaseBtn = document.getElementById('propReleaseBtn');
+    if (pledgeBtn) {
+      pledgeBtn.style.display = (st === 1) ? 'none' : '';
+      pledgeBtn.disabled = !(owned && st === 0);
+    }
+    if (releaseBtn) { releaseBtn.style.display = (st === 1) ? '' : 'none'; }
   }
 
   /* The amount is chosen with buttons, never typed: Skyrim does not deliver keyboard
@@ -2196,10 +2096,21 @@
         ? ('달성 경로 ' + state.paths + '개 · 한도 +' + ((state.paths - 1) * 25) + '%')
         : '');
 
+      if (data.propertyOwned !== undefined) { state.propertyOwned = data.propertyOwned; }
+      if (data.propertyState !== undefined) { state.propertyState = data.propertyState; }
+      if (data.propertyValue !== undefined) { state.propertyValue = data.propertyValue; }
+      if (data.collateralCredit !== undefined) { state.collateralCredit = data.collateralCredit; }
+      if (data.ltv !== undefined) { state.ltv = data.ltv; }
+      if (data.forecloseDays !== undefined) { state.forecloseDays = data.forecloseDays; }
+      if (data.propertyName !== undefined) { state.propertyName = data.propertyName; }
+      if (data.propertyOwned !== undefined || data.propertyState !== undefined) { updateCollateral(); }
+
       // Each activity keeps its own book, so a figure is always explained by the
       // lines directly beneath it rather than in a separate combined ledger.
       if (data.txType) {
-        if (data.txType === 'borrow' || data.txType === 'repay') {
+        if (data.txType === 'pledge' || data.txType === 'release') {
+          // A pledge moves no gold, so it has no line in any of the three books.
+        } else if (data.txType === 'borrow' || data.txType === 'repay') {
           addEntry('loanLog', loanEntries, data.txType, data.txAmount || 0, state.debt, '대출 잔액');
         } else if (data.txType === 'payCredit') {
           addEntry('creditLog', creditEntries, data.txType, data.txAmount || 0, state.creditDebt, '외상 잔액');

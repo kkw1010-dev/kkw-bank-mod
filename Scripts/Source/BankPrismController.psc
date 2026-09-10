@@ -54,6 +54,14 @@ GlobalVariable Property DebugHotkey Auto
 
 MiscObject Property Gold001 Auto
 
+; --- collateral ----------------------------------------------------------
+; Per hold: 0 no pledge, 1 house pledged, 2 house seized. CollateralLtv is bound in the
+; same generation as the array and stands in for it as the readiness flag.
+GlobalVariable[] Property PropertyPledges Auto
+GlobalVariable Property CollateralLtv Auto
+GlobalVariable Property ForecloseDays Auto
+Quest Property HousePurchase Auto            ; carries HousePurchaseScript and its QF fragment script
+
 Bool Property bMenuOpen = False Auto
 Int Property CurrentHold = 0 Auto Hidden
 
@@ -89,6 +97,7 @@ Function ReportState()
     If HoldsReady()
         Trace("accounts: " + BankBalances.Length + " holds bound")
         Trace("enabled holds: " + EnabledHoldList())
+        Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None))
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -296,6 +305,7 @@ Function ShowBank()
     EnsureDunningRun()
     bMenuOpen = True
     AccrueOverdue(CurrentHold)
+    ForeclosePropertyIfDue(CurrentHold)
     BankPrismNative.OpenMenu()
     Refresh("")
 EndFunction
@@ -340,6 +350,13 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"loanDaysLeft\":" + GetLoanDaysLeft() \
         + ", \"hold\":\"" + GetHoldName(CurrentHold) + "\"" \
         + ", \"holdKey\":\"" + GetHoldKey(CurrentHold) + "\"" \
+        + ", \"propertyOwned\":" + (PropertyOwned(CurrentHold) as Int) \
+        + ", \"propertyState\":" + PropertyState(CurrentHold) \
+        + ", \"propertyValue\":" + PropertyAppraisal(CurrentHold) \
+        + ", \"collateralCredit\":" + CollateralCredit(CurrentHold) \
+        + ", \"ltv\":" + GetLtvPercent() \
+        + ", \"forecloseDays\":" + GetForecloseDays() \
+        + ", \"propertyName\":\"" + PropertyName(CurrentHold) + "\"" \
         + ", \"txType\":\"" + asTxType + "\"" \
         + ", \"txAmount\":" + aiTxAmount \
         + ", \"message\":\"" + asMessage + "\"}"
@@ -555,11 +572,14 @@ EndEvent
 ; main quest: the court lends on the strength of what it recognises, and four
 ; different lives - Dragonborn, Circle, College, war - can earn the same trust.
 Int Function GetLoanLimit()
+    Int limit = 0
     Int tier = GetCreditTier(CurrentHold)
-    If !StandingReady() || tier < 1 || tier > LoanLimits.Length
-        Return 0
+    If StandingReady() && tier >= 1 && tier <= LoanLimits.Length
+        limit = WithPathBonus(GetGlobalInt(LoanLimits[tier - 1]), CurrentHold)
     EndIf
-    Return WithPathBonus(GetGlobalInt(LoanLimits[tier - 1]), CurrentHold)
+    ; A pledged house is lent against at any standing: the court that will not trust a
+    ; nameless sellsword on his word will still take his deed.
+    Return limit + CollateralCredit(CurrentHold)
 EndFunction
 
 Int Function GetLoanTermDays()
@@ -1086,10 +1106,192 @@ Function RepayLoan(Int aiAmount, Int aiPlayerGold)
         If LoansReady()
             AccruedDays[CurrentHold].SetValueInt(0)
         EndIf
-        RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
+        If RestorePropertyIfSeized(CurrentHold)
+            RefreshTx("대출을 모두 갚았습니다. " + PropertyName(CurrentHold) + " 압류가 풀렸습니다.", "repay", paid)
+        Else
+            RefreshTx("대출을 모두 갚았습니다.", "repay", paid)
+        EndIf
     Else
         RefreshTx(paid + " 골드를 갚았습니다. 남은 채무 " + (owed - paid) + " 골드.", "repay", paid)
     EndIf
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Property collateral
+; ---------------------------------------------------------------------------
+
+; Only Whiterun has a house mapped, Breezehome, because only Whiterun is served. Every
+; fact about it comes from vanilla's HousePurchase quest: WhiterunHouseVar, which vanilla
+; Hearthfire also reads as "owns Breezehome"; HPWhiterun, the price Proventus asks; and
+; the stage-10 fragment script's WhiterunHouse, the interior cell whose owner the
+; purchase sets to PlayerFaction.
+Bool Function CollateralReady()
+    Return CollateralLtv != None
+EndFunction
+
+String Function PropertyName(Int aiHold)
+    If aiHold == 0
+        Return "브리즈홈"
+    EndIf
+    Return ""
+EndFunction
+
+Bool Function PropertyOwned(Int aiHold)
+    If aiHold != 0 || HousePurchase == None
+        Return False
+    EndIf
+    HousePurchaseScript purchase = HousePurchase as HousePurchaseScript
+    Return purchase != None && purchase.WhiterunHouseVar >= 1
+EndFunction
+
+Int Function PropertyAppraisal(Int aiHold)
+    If aiHold != 0 || HousePurchase == None
+        Return 0
+    EndIf
+    HousePurchaseScript purchase = HousePurchase as HousePurchaseScript
+    If purchase == None || purchase.HPWhiterun == None
+        Return 0
+    EndIf
+    Return purchase.HPWhiterun.GetValueInt()
+EndFunction
+
+Cell Function PropertyCell(Int aiHold)
+    If aiHold != 0 || HousePurchase == None
+        Return None
+    EndIf
+    QF_HousePurchase_000A7B33 fragments = HousePurchase as QF_HousePurchase_000A7B33
+    If fragments == None
+        Return None
+    EndIf
+    Return fragments.WhiterunHouse
+EndFunction
+
+Int Function PropertyState(Int aiHold)
+    If !CollateralReady() || !HoldIsValid(aiHold)
+        Return 0
+    EndIf
+    Return PropertyPledges[aiHold].GetValueInt()
+EndFunction
+
+Int Function GetLtvPercent()
+    Int pct = 60
+    If CollateralLtv
+        pct = CollateralLtv.GetValueInt()
+    EndIf
+    If pct < 0
+        pct = 0
+    ElseIf pct > 100
+        pct = 100
+    EndIf
+    Return pct
+EndFunction
+
+Int Function GetForecloseDays()
+    Int days = 7
+    If ForecloseDays
+        days = ForecloseDays.GetValueInt()
+    EndIf
+    If days < 1
+        days = 1
+    EndIf
+    Return days
+EndFunction
+
+; What the pledge adds to the loan ceiling. Nothing once the house is seized.
+Int Function CollateralCredit(Int aiHold)
+    If PropertyState(aiHold) != 1 || !PropertyOwned(aiHold)
+        Return 0
+    EndIf
+    Return (PropertyAppraisal(aiHold) * GetLtvPercent()) / 100
+EndFunction
+
+Function PledgeProperty()
+    If !CollateralReady()
+        Refresh("이 저장 파일에서는 담보를 취급할 수 없습니다. 새 회차가 필요합니다.")
+        Return
+    EndIf
+    If !HoldIsValid(CurrentHold) || !HoldIsEnabled(CurrentHold)
+        Refresh("담보를 취급할 수 없습니다.")
+        Return
+    EndIf
+    If !PropertyOwned(CurrentHold)
+        Refresh("저당 잡힐 집이 없습니다.")
+        Return
+    EndIf
+    Int current = PropertyState(CurrentHold)
+    If current == 2
+        Refresh("압류된 집은 저당 잡힐 수 없습니다.")
+        Return
+    ElseIf current == 1
+        Refresh("이미 저당 잡혀 있습니다.")
+        Return
+    EndIf
+
+    PropertyPledges[CurrentHold].SetValueInt(1)
+    Int credit = CollateralCredit(CurrentHold)
+    Trace("collateral: " + PropertyName(CurrentHold) + " pledged, appraisal=" + PropertyAppraisal(CurrentHold) + " credit=" + credit)
+    RefreshTx(PropertyName(CurrentHold) + "을 저당 잡혔습니다. 대출 한도가 " + credit + " 골드 늘었습니다.", "pledge", credit)
+EndFunction
+
+Function ReleaseProperty()
+    If !CollateralReady() || !HoldIsValid(CurrentHold)
+        Refresh("담보를 취급할 수 없습니다.")
+        Return
+    EndIf
+    If PropertyState(CurrentHold) != 1
+        Refresh("저당 잡힌 집이 없습니다.")
+        Return
+    EndIf
+    If BankDebts[CurrentHold].GetValueInt() > 0
+        Refresh("대출을 모두 갚아야 저당을 풀 수 있습니다.")
+        Return
+    EndIf
+
+    PropertyPledges[CurrentHold].SetValueInt(0)
+    Trace("collateral: " + PropertyName(CurrentHold) + " released")
+    RefreshTx(PropertyName(CurrentHold) + " 저당을 풀었습니다.", "release", 0)
+EndFunction
+
+; Seizure hands the house's cell to the hold - the same switch the purchase flips the
+; other way. Nothing inside is moved or deleted, and repaying in full hands it back.
+Function ForeclosePropertyIfDue(Int aiHold)
+    If PropertyState(aiHold) != 1 || !LoansReady()
+        Return
+    EndIf
+    If GetOverdueDays(aiHold) < GetForecloseDays()
+        Return
+    EndIf
+
+    Cell house = PropertyCell(aiHold)
+    Faction owner = None
+    If HoldsReady()
+        owner = HoldCrimeFactions.GetAt(aiHold) as Faction
+    EndIf
+    If house == None || owner == None
+        Trace("collateral: cannot seize " + PropertyName(aiHold) + " - cellBound=" + (house != None) + " factionBound=" + (owner != None))
+        Return
+    EndIf
+
+    house.SetFactionOwner(owner)
+    PropertyPledges[aiHold].SetValueInt(2)
+    Trace("collateral: " + PropertyName(aiHold) + " seized at " + GetOverdueDays(aiHold) + " days overdue, owner now " + owner)
+    Debug.Notification(GetHoldName(aiHold) + " 행정관이 " + PropertyName(aiHold) + "을 압류했습니다.")
+EndFunction
+
+Bool Function RestorePropertyIfSeized(Int aiHold)
+    If PropertyState(aiHold) != 2
+        Return False
+    EndIf
+    Cell house = PropertyCell(aiHold)
+    HousePurchaseScript purchase = HousePurchase as HousePurchaseScript
+    If house != None && purchase != None && purchase.PlayerFaction != None
+        house.SetFactionOwner(purchase.PlayerFaction)
+    Else
+        Trace("collateral: could not hand the cell back - cellBound=" + (house != None) + " purchaseScript=" + (purchase != None))
+    EndIf
+    PropertyPledges[aiHold].SetValueInt(0)
+    Trace("collateral: " + PropertyName(aiHold) + " returned to the player")
+    Return True
 EndFunction
 
 ; ---------------------------------------------------------------------------
@@ -1179,6 +1381,7 @@ Event OnUpdateGameTime()
         ; is, but it neither accrues nor sends letters the player could not answer.
         If HoldIsEnabled(i)
             AccrueOverdue(i)
+            ForeclosePropertyIfDue(i)
             ; Letter N is written for day N overdue - day three's says 사흘째 - so none
             ; goes out on the due date itself. Before, day one's letter arrived twice:
             ; once at zero days overdue, clamped up to one, and again at one.
@@ -1222,6 +1425,10 @@ Event OnBankPrismAction(String eventName, String strArg, Float numArg, Form send
         RepayLoan(amount, playerGold)
     ElseIf strArg == "payCredit"
         PayMerchantCredit(playerGold)
+    ElseIf strArg == "pledgeProperty"
+        PledgeProperty()
+    ElseIf strArg == "releaseProperty"
+        ReleaseProperty()
     ElseIf strArg == "sellBond"
         Refresh("채권 매각은 서드파티 연동 후 사용할 수 있습니다.")
     ElseIf StringUtil.Find(strArg, "diag:") == 0

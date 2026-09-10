@@ -193,6 +193,45 @@ namespace EspGenerator
             // actually means the player joined the Circle" is read off the record
             // instead of recalled.
             //   dotnet run -- quest <formid-hex>
+            // Which stage runs which script fragment, and every script property's bound
+            // value. `quest` lists property names only; a console instruction such as
+            // `setstage` or a Papyrus cast needs the stage number and the actual form.
+            if (args.Length > 1 && args[0] == "qfrag")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var id = Convert.ToUInt32(args[1], 16);
+                var q = esm.Quests.FirstOrDefault(x => x.FormKey.ID == id);
+                if (q == null) { Console.WriteLine("no such quest"); return; }
+                Console.WriteLine($"QUST {q.FormKey.ID:X6} {q.EditorID}");
+                var vm = q.VirtualMachineAdapter;
+                if (vm == null) { Console.WriteLine("  (no scripts)"); return; }
+                var qcache = esm.ToImmutableLinkCache();
+                string Named(FormKey? fk) =>
+                    fk is FormKey k && qcache.TryResolve(k, out var rec) ? $"{k} {rec.EditorID}" : fk?.ToString() ?? "(none)";
+                foreach (var f in vm.Fragments)
+                    Console.WriteLine($"  stage {f.Stage,4} index {f.StageIndex} -> {f.ScriptName}.{f.FragmentName}");
+                foreach (var st in q.Stages)
+                    Console.WriteLine($"  stage record {st.Index} logEntries={st.LogEntries.Count}");
+                foreach (var sc in vm.Scripts)
+                {
+                    Console.WriteLine($"  script {sc.Name}");
+                    foreach (var pr in sc.Properties)
+                    {
+                        string v = pr switch
+                        {
+                            IScriptObjectPropertyGetter o => Named(o.Object.FormKeyNullable),
+                            IScriptIntPropertyGetter i => i.Data.ToString(),
+                            IScriptFloatPropertyGetter fl => fl.Data.ToString(),
+                            IScriptBoolPropertyGetter b => b.Data.ToString(),
+                            _ => pr.GetType().Name
+                        };
+                        Console.WriteLine($"    {pr.Name,-28} = {v}");
+                    }
+                }
+                return;
+            }
+
             if (args.Length > 1 && args[0] == "quest")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -1074,6 +1113,9 @@ namespace EspGenerator
             const uint IdCreditLimitBase = 0x8A0;  // merchant credit ceiling per tier
             const uint IdCreditTierBase  = 0x8B0;  // per hold: highest tier recognised
             const uint IdCreditPathBase  = 0x8C0;  // per hold: the deed that earned it
+            const uint IdPropertyPledgeBase = 0x8D0; // per hold: 0 none, 1 house pledged, 2 seized
+            const uint IdCollateralLtv   = 0x8E0;  // share of the appraisal lent against, percent
+            const uint IdForecloseDays   = 0x8E1;  // days overdue before a pledged house is seized
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
@@ -1169,6 +1211,15 @@ namespace EspGenerator
                 creditTiers.Add(NewGlobal(IdCreditTierBase + i, "BankCreditTier" + holds[i].name));
                 creditPaths.Add(NewGlobal(IdCreditPathBase + i, "BankCreditPath" + holds[i].name));
             }
+
+            // Property collateral. Nothing about the house itself is stored here: whether
+            // it is owned, what it is worth and which cell it is are all read from vanilla's
+            // HousePurchase quest at run time.
+            var propertyPledges = new List<GlobalFloat>();
+            for (uint i = 0; i < holds.Length; i++)
+                propertyPledges.Add(NewGlobal(IdPropertyPledgeBase + i, "BankPropertyPledge" + holds[i].name));
+            var collateralLtv = NewGlobal(IdCollateralLtv, "BankCollateralLtvPercent", 60f);
+            var forecloseDays = NewGlobal(IdForecloseDays, "BankForecloseOverdueDays", 7f);
 
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
             // Charged per DAY overdue, on the original sum. A weekly charge left the
@@ -1434,6 +1485,11 @@ namespace EspGenerator
             ObjProp("DebugHotkey", debugHotkey.FormKey);
             ObjProp("LoanTermDays", loanTermDays.FormKey);
             ObjProp("OverduePercent", overduePct.FormKey);
+            ListProp("PropertyPledges", propertyPledges);
+            // Bound in the same generation as PropertyPledges, so Papyrus tests this scalar
+            // as the array's readiness flag instead of touching an unbound array.
+            ObjProp("CollateralLtv", collateralLtv.FormKey);
+            ObjProp("ForecloseDays", forecloseDays.FormKey);
 
             // ---- Standing: the records each tier is actually read from -----------------
             // Every id below was read out of Skyrim.esm with the probes in this file, not
@@ -1460,6 +1516,10 @@ namespace EspGenerator
             ObjProp("CWImperial", Vanilla(0x02BF9A));
             ObjProp("CWSons", Vanilla(0x02BF9B));
             ObjProp("Courier", Vanilla(0x039F82));           // WICourier
+            // HousePurchase carries HousePurchaseScript (WhiterunHouseVar, HPWhiterun =
+            // 0F728B, PlayerFaction) and the stage-10 fragment script whose WhiterunHouse
+            // property is Breezehome's interior cell, 0165A8. Read with `qfrag 0A7B33`.
+            ObjProp("HousePurchase", Vanilla(0x0A7B33));
 
             ObjProp("Gold001", Gold001);
 
@@ -1868,6 +1928,28 @@ namespace EspGenerator
                     if (ch < 0x80) continue;
                     if (glyphs.Contains(ch)) continue;
                     if (!missing.ContainsKey(ch)) missing[ch] = $"{edid} / {field}";
+                }
+            }
+
+            // Papyrus notifications and refusals are drawn by the same font, and nothing
+            // looked at them until now. String literals only; comments are skipped.
+            var repoRoot = Path.GetDirectoryName(Path.GetFullPath(espPath))!;
+            foreach (var psc in Directory.GetFiles(Path.Combine(repoRoot, "Scripts", "Source"), "*.psc"))
+            {
+                int lineNo = 0;
+                foreach (var line in File.ReadLines(psc, Encoding.UTF8))
+                {
+                    lineNo++;
+                    bool inQuote = false;
+                    for (int k = 0; k < line.Length; k++)
+                    {
+                        char ch = line[k];
+                        if (inQuote && ch == '\\') { k++; continue; }
+                        if (ch == '"') { inQuote = !inQuote; continue; }
+                        if (!inQuote && ch == ';') break;
+                        if (!inQuote || ch < 0x80 || glyphs.Contains(ch)) continue;
+                        if (!missing.ContainsKey(ch)) missing[ch] = $"{Path.GetFileName(psc)}:{lineNo}";
+                    }
                 }
             }
 
