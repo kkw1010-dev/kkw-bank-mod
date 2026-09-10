@@ -33,6 +33,9 @@ dotnet run -- members <팩션,팩션>    # 나열한 팩션에 모두 속한 NPC
 dotnet run -- refs <NPC>            # 배치 레퍼런스 ID와 셀 (콘솔 player.moveto에 쓰는 ID)
 dotnet run -- qfrag <퀘스트폼ID>     # 시작 이벤트, 별칭, 스테이지별 프래그먼트, 프로퍼티 실제 값
 dotnet run -- doors <셀EditorID>     # 셀 안의 문과 셀로 들어오는 문, 잠금·열쇠
+dotnet run -- cellrefs <셀> [키워드]  # 셀 안의 배치 레퍼런스와 퍼시스턴트 여부
+dotnet run -- crimejail <범죄팩션>    # 홀드 감옥 데이터(마커, 증거 상자)와 위치
+dotnet run -- aliasfaction <팩션>     # 그 팩션을 런타임에 부여하는 바닐라 별칭
 dotnet run -- quest/info/usage/script/credit/stewards ...   # TASK.md 진단 도구 절 참고
 ```
 필요한 진단이 없으면 `Program.cs`에 진단 모드를 추가해서 확인하십시오.
@@ -90,6 +93,7 @@ dotnet run -- quest/info/usage/script/credit/stewards ...   # TASK.md 진단 도
 ## 2. 빌드와 검증
 
 1. **ESP:** `cd EspGenerator && dotnet run`
+   - 진단 모드를 `--no-build`로 돌리는 것은 **빌드가 성공했을 때만** 합니다. 실패한 뒤에 돌리면 이전 실행 파일이 돕니다. 알 수 없는 모드는 이제 exit 2로 끝나고 아무것도 쓰지 않습니다.
    - 생성한 뒤 디스크에서 다시 읽어 검사하고, 하나라도 실패하면 exit 1로 끝납니다. 실패하면 배포하지 마십시오.
    - 대화문 불변조건
    - 홀드 제한: 대화 토픽이 Skyrim.esm 기준으로 누구에게 뜨는지 계산하고, `HoldIsEnabled()`와 `enabledHolds`가 일치하는지 봄

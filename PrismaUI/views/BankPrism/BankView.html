@@ -1433,7 +1433,7 @@
     propertyOwned: 0, propertyState: 0, propertyValue: 0, collateralCredit: 0,
     ltv: 60, forecloseDays: 7, propertyName: '', lienReleaseFee: 0, lienFeePercent: 20, propertyLocked: 0,
     guarantorAppointed: 0, guarantorAlive: 1, guarantorState: 0, guarantorCredit: 0, guarantorCreditAmount: 2000,
-    guarantorName: '리디아', guarantorTitle: '화이트런 하우스칼',
+    guarantorName: '리디아', guarantorTitle: '화이트런 하우스칼', guarantorPending: 0, guarantorJailed: 0,
     received: false
   };
   var amount = 0;
@@ -1668,11 +1668,14 @@
     } else if (guarSt === 1) {
       gPillText = '보증 중'; gPillClass = 'active'; gCardClass = 'col-card pledged';
       gDesc = guarTitle + ' ' + guarName + '이(가) 채무를 보증하고 있습니다. 대출 한도가 ' + comma(guarPotential) + ' G 늘어났습니다.';
-      gWarn = '⚠️ 연체 ' + state.forecloseDays + '일이 지나면 행정관이 보증인에게 구상권을 청구합니다. 대출을 모두 갚으면 보증을 해제할 수 있습니다.';
+      gWarn = '⚠️ 연체 ' + state.forecloseDays + '일이 지나면 행정관이 보증인에게 구상권을 청구하고, 플레이어가 잠든 사이 경비대가 ' + guarName + '을(를) 드래곤스리치 감옥으로 연행합니다. 대출을 모두 갚으면 보증을 해제할 수 있습니다.';
     } else if (guarSt === 2) {
-      gPillText = '구상권 청구'; gPillClass = 'seized'; gCardClass = 'col-card';
-      gDesc = '연체로 행정관이 보증인 ' + guarName + '에게 구상권을 집행했습니다. 보증 효력이 정지되었습니다.';
-      gWarn = '⚠️ 대출을 전액 상환해야 보증인에 대한 추심이 해제되고 보증 효력이 복원됩니다.';
+      gPillText = state.guarantorJailed > 0 ? '구금' : '구상권 청구'; gPillClass = 'seized'; gCardClass = 'col-card';
+      gDesc = '연체로 행정관이 보증인 ' + guarName + '에게 구상권을 집행했습니다. '
+        + (state.guarantorJailed > 0
+          ? guarName + '은(는) 드래곤스리치 감옥에 구금되어 있습니다.'
+          : '플레이어가 잠든 사이 경비대가 ' + guarName + '을(를) 드래곤스리치 감옥으로 연행합니다.');
+      gWarn = '⚠️ 대출을 전액 상환하면 ' + guarName + '이(가) 풀려나고 보증 효력이 복원됩니다.';
     } else {
       gPillText = '보증 가능'; gPillClass = 'available'; gCardClass = 'col-card available';
       gDesc = guarTitle + ' ' + guarName + '을(를) 연대보증인으로 등록하면 대출 한도가 ' + comma(guarPotential) + ' G 늘어납니다.';
@@ -2237,6 +2240,8 @@
       if (data.guarantorCreditAmount !== undefined) { state.guarantorCreditAmount = data.guarantorCreditAmount; }
       if (data.guarantorName !== undefined) { state.guarantorName = data.guarantorName; }
       if (data.guarantorTitle !== undefined) { state.guarantorTitle = data.guarantorTitle; }
+      if (data.guarantorPending !== undefined) { state.guarantorPending = data.guarantorPending; }
+      if (data.guarantorJailed !== undefined) { state.guarantorJailed = data.guarantorJailed; }
       if (data.propertyOwned !== undefined || data.propertyState !== undefined || data.guarantorState !== undefined || data.guarantorAppointed !== undefined) { updateCollateral(); }
 
       // Each activity keeps its own book, so a figure is always explained by the

@@ -352,6 +352,79 @@ namespace EspGenerator
                 return;
             }
 
+            // A crime faction's jail data - jail marker, follower wait marker, containers -
+            // read by reflection so no field is guessed, then each placed reference located
+            // in its cell. The vanilla jail marker is where the hold itself puts prisoners.
+            if (args.Length > 1 && args[0] == "crimejail")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var jcache = esm.ToImmutableLinkCache();
+                var fac = esm.Factions.FirstOrDefault(f => string.Equals(f.EditorID, args[1], StringComparison.OrdinalIgnoreCase));
+                if (fac == null) { Console.WriteLine("no such faction"); return; }
+                var wanted = new Dictionary<FormKey, string>();
+                foreach (var prop in fac.GetType().GetProperties())
+                {
+                    object? v;
+                    try { v = prop.GetValue(fac); } catch { continue; }
+                    if (v is IFormLinkGetter link && link.FormKeyNullable is FormKey fk && !fk.IsNull)
+                    {
+                        string edid = jcache.TryResolve(fk, link.Type, out var rec) ? rec.EditorID ?? "" : "";
+                        Console.WriteLine($"  {prop.Name,-28} = {fk} {edid}");
+                        wanted[fk] = prop.Name;
+                    }
+                }
+                foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedObject, IPlacedObjectGetter>(jcache))
+                {
+                    if (!wanted.TryGetValue(ctx.Record.FormKey, out var field)) continue;
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    var cellRec = parent?.Record as ICellGetter;
+                    string baseEdid = jcache.TryResolve<ISkyrimMajorRecordGetter>(ctx.Record.Base.FormKey, out var b) ? b.EditorID ?? "" : "";
+                    Console.WriteLine($"  -> {field,-24} ref={ctx.Record.FormKey.ID:X8} base={baseEdid} cell={cellRec?.EditorID} {cellRec?.FormKey.ID:X6} persistent={(ctx.Record.MajorRecordFlagsRaw & 0x400) != 0}");
+                }
+                return;
+            }
+
+            // Placed objects and actors in one cell, with base EditorID, position and the
+            // persistent flag, optionally filtered by a base EditorID keyword. A script
+            // target has to be persistent, or it does not resolve while the cell is unloaded.
+            //   dotnet run -- cellrefs <cellEditorID> [keyword]
+            if (args.Length > 1 && args[0] == "cellrefs")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var ccache = esm.ToImmutableLinkCache();
+                string keyword = args.Length > 2 ? args[2] : "";
+                int shown = 0;
+                bool InCell(Mutagen.Bethesda.Plugins.Cache.IModContext ctx)
+                {
+                    var parent = ctx.Parent;
+                    while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                    return string.Equals((parent?.Record as ICellGetter)?.EditorID, args[1], StringComparison.OrdinalIgnoreCase);
+                }
+                foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedObject, IPlacedObjectGetter>(ccache))
+                {
+                    if (!InCell(ctx)) continue;
+                    string baseEdid = ccache.TryResolve<ISkyrimMajorRecordGetter>(ctx.Record.Base.FormKey, out var b) ? b.EditorID ?? "" : "";
+                    if (keyword != "" && baseEdid.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    bool persistent = (ctx.Record.MajorRecordFlagsRaw & 0x400) != 0;
+                    Console.WriteLine($"  OBJ  ref={ctx.Record.FormKey.ID:X8} persistent={persistent,-5} base={baseEdid,-40} pos={ctx.Record.Placement?.Position}");
+                    shown++;
+                }
+                foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedNpc, IPlacedNpcGetter>(ccache))
+                {
+                    if (!InCell(ctx)) continue;
+                    string baseEdid = ccache.TryResolve<ISkyrimMajorRecordGetter>(ctx.Record.Base.FormKey, out var b) ? b.EditorID ?? "" : "";
+                    if (keyword != "" && baseEdid.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    bool persistent = (ctx.Record.MajorRecordFlagsRaw & 0x400) != 0;
+                    Console.WriteLine($"  ACHR ref={ctx.Record.FormKey.ID:X8} persistent={persistent,-5} base={baseEdid,-40} pos={ctx.Record.Placement?.Position}");
+                    shown++;
+                }
+                Console.WriteLine($"  {shown} refs");
+                return;
+            }
+
             if (args.Length > 1 && args[0] == "quest")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -1193,6 +1266,17 @@ namespace EspGenerator
 
                     if (++shown >= 2) break;
                 }
+                return;
+            }
+
+            // Every diagnostic mode returns before this point, so arguments reaching here
+            // are a mode this build does not know. That happened: a build failed, a
+            // `--no-build` run fell back to the previous binary, it did not recognise the
+            // new mode, and it quietly regenerated the plugin instead of saying so.
+            if (args.Length > 0)
+            {
+                Console.WriteLine($"알 수 없는 진단 모드: {args[0]} - 플러그인을 생성하지 않고 끝낸다. (빌드가 실패해 이전 실행 파일이 돈 것일 수 있다)");
+                Environment.ExitCode = 2;
                 return;
             }
 

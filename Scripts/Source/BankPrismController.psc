@@ -80,6 +80,12 @@ Bool FrontDoorWasLocked = False
 Int FrontDoorLockLevel = 0
 Int KeysTaken = 0
 
+; The guarantor's arrest. A claimed guarantor is not taken in front of the player: the
+; transfer waits for the player's next full night's sleep. Plain variables, not
+; properties, so the save format does not change.
+Bool GuarantorTransferPending = False
+Bool GuarantorJailed = False
+
 Bool Property bMenuOpen = False Auto
 Int Property CurrentHold = 0 Auto Hidden
 
@@ -94,6 +100,7 @@ Event OnInit()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
     EnsureDunningRun()
+    RegisterForSleep()
     Trace("OnInit - quest is live in this save")
     ReportState()
 EndEvent
@@ -164,7 +171,7 @@ Function ReportState()
         Trace("enabled holds: " + EnabledHoldList())
         ReportDialogueReach()
         Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None) + " frontDoorBound=" + (BreezehomeFrontDoor != None) + " keyBound=" + (PropertyKey(0) != None) + " locked=" + LockoutApplied + " releaseFee=" + LienReleaseFee(0))
-        Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None))
+        Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None) + " transferPending=" + GuarantorTransferPending + " jailed=" + GuarantorJailed + " jailMarker=" + (GuarantorJailMarker() != None))
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -370,6 +377,8 @@ Function ShowBank()
     RegisterForModEvent("BankPrismAction", "OnBankPrismAction")
     RegisterDebugHotkey()
     EnsureDunningRun()
+    ; Sleep registrations are lost when the script is replaced, like every other.
+    RegisterForSleep()
     bMenuOpen = True
     AccrueOverdue(CurrentHold)
     ForeclosePropertyIfDue(CurrentHold)
@@ -435,6 +444,8 @@ Function RefreshTx(String asMessage, String asTxType, Int aiTxAmount)
         + ", \"guarantorCreditAmount\":" + GuarantorCreditBase(CurrentHold) \
         + ", \"guarantorName\":\"" + GuarantorName(CurrentHold) + "\"" \
         + ", \"guarantorTitle\":\"" + GuarantorTitle(CurrentHold) + "\"" \
+        + ", \"guarantorPending\":" + (GuarantorTransferPending as Int) \
+        + ", \"guarantorJailed\":" + (GuarantorJailed as Int) \
         + ", \"txType\":\"" + asTxType + "\"" \
         + ", \"txAmount\":" + aiTxAmount \
         + ", \"message\":\"" + asMessage + "\"}"
@@ -1583,7 +1594,7 @@ Function PledgeGuarantor()
     GuarantorPledges[CurrentHold].SetValueInt(1)
     Int credit = GuarantorCredit(CurrentHold)
     Trace("guarantor: " + GuarantorName(CurrentHold) + " pledged, credit=" + credit)
-    Refresh(GuarantorName(CurrentHold) + "을 연대보증인으로 등록했습니다. 대출 한도가 " + credit + " 골드 늘었습니다.")
+    Refresh(GuarantorName(CurrentHold) + "를 연대보증인으로 등록했습니다. 대출 한도가 " + credit + " 골드 늘었습니다.")
 EndFunction
 
 Function ReleaseGuarantor()
@@ -1616,6 +1627,11 @@ Function ClaimGuarantorIfDue(Int aiHold)
     GuarantorPledges[aiHold].SetValueInt(2)
     Trace("guarantor: " + GuarantorName(aiHold) + " claimed at " + GetOverdueDays(aiHold) + " days overdue")
     Debug.Notification(GetHoldName(aiHold) + " 행정관이 연대보증인 " + GuarantorName(aiHold) + "에게 구상권을 청구했습니다.")
+    If aiHold == 0
+        GuarantorTransferPending = True
+        RegisterForSleep()
+        Trace("guarantor: transfer to Dragonsreach jail waits for the player's next full sleep")
+    EndIf
 EndFunction
 
 Bool Function RestoreGuarantorIfClaimed(Int aiHold)
@@ -1624,7 +1640,88 @@ Bool Function RestoreGuarantorIfClaimed(Int aiHold)
     EndIf
     GuarantorPledges[aiHold].SetValueInt(1)
     Trace("guarantor: " + GuarantorName(aiHold) + " claim lifted upon full repayment")
+    ReleaseGuarantorFromJail(aiHold)
     Return True
+EndFunction
+
+; Whiterun's own prison marker: the persistent PrisonMarker in WhiterunDragonsreachBasement,
+; the cell whose evidence chests CrimeFactionWhiterun names. Read with
+; `dotnet run -- crimejail CrimeFactionWhiterun` and `cellrefs WhiterunDragonsreachBasement Prison`.
+ObjectReference Function GuarantorJailMarker()
+    Return Game.GetForm(0x000267E4) as ObjectReference
+EndFunction
+
+; Only a full night counts. A sleep broken by an attack leaves the transfer waiting.
+Event OnSleepStop(Bool abInterrupted)
+    If !GuarantorTransferPending
+        Return
+    EndIf
+    If abInterrupted
+        Trace("guarantor: sleep interrupted, transfer still waiting")
+        Return
+    EndIf
+    TransferGuarantorToJail(0)
+EndEvent
+
+Function TransferGuarantorToJail(Int aiHold)
+    If aiHold != 0 || !GuarantorTransferPending || GuarantorJailed
+        Return
+    EndIf
+    If GuarantorState(aiHold) != 2
+        GuarantorTransferPending = False
+        Trace("guarantor: transfer dropped - the claim is no longer active")
+        Return
+    EndIf
+
+    Actor guarantor = HousecarlWhiterun
+    ObjectReference marker = GuarantorJailMarker()
+    If guarantor == None || marker == None
+        Trace("guarantor: cannot transfer - housecarlBound=" + (guarantor != None) + " jailMarker=" + (marker != None))
+        Return
+    EndIf
+    If guarantor.IsDead()
+        GuarantorTransferPending = False
+        Trace("guarantor: " + GuarantorName(aiHold) + " is dead, nothing to transfer")
+        Return
+    EndIf
+    If guarantor.IsInCombat()
+        Trace("guarantor: " + GuarantorName(aiHold) + " is in combat, transfer waits for the next sleep")
+        Return
+    EndIf
+
+    ; A current follower is pulled straight back to the player, so she is dismissed
+    ; through vanilla's own follower quest first. No dismissal line, no wait.
+    Quest followerQuest = Game.GetForm(0x000750BA) as Quest
+    DialogueFollowerScript followers = followerQuest as DialogueFollowerScript
+    If followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == guarantor
+        followers.DismissFollower(0, 0)
+        Trace("guarantor: " + GuarantorName(aiHold) + " dismissed as the player's follower before the transfer")
+    EndIf
+
+    guarantor.MoveTo(marker)
+    guarantor.SetDontMove(True)
+    guarantor.SetRestrained(True)
+    GuarantorTransferPending = False
+    GuarantorJailed = True
+    Trace("guarantor: " + GuarantorName(aiHold) + " moved to the Dragonsreach jail marker and held there")
+    Debug.Notification("밤사이 화이트런 경비대가 " + GuarantorName(aiHold) + "를 드래곤스리치 감옥으로 연행했습니다.")
+EndFunction
+
+Function ReleaseGuarantorFromJail(Int aiHold)
+    GuarantorTransferPending = False
+    If aiHold != 0 || !GuarantorJailed
+        Return
+    EndIf
+    Actor guarantor = HousecarlWhiterun
+    If guarantor != None
+        guarantor.SetRestrained(False)
+        guarantor.SetDontMove(False)
+        guarantor.MoveToPackageLocation()
+        guarantor.EvaluatePackage()
+    EndIf
+    GuarantorJailed = False
+    Trace("guarantor: " + GuarantorName(aiHold) + " released from the Dragonsreach jail")
+    Debug.Notification(GuarantorName(aiHold) + "가 드래곤스리치 감옥에서 풀려났습니다.")
 EndFunction
 
 ; ---------------------------------------------------------------------------
