@@ -19,7 +19,7 @@
 |---|---|
 | 저장소 | `C:\TAKEALOOK\BankPrismUI` |
 | 원격 | `git@github.com:kkw1010-dev/kkw-bank-mod.git` |
-| 배포 대상 (MO2) | `C:\TAKEALOOK\mods\BankPrismUI` |
+| 배포 대상 (MO2) | `C:\TAKEALOOK\mods\Financial Hell - Skyrim Banking and Credit Overhaul_dev build` |
 | MO2 활성 프로필 | `TKL - MUNG ADDON` |
 | 게임 데이터 | `C:\TAKEALOOK\Stock Game\Data\Skyrim.esm` |
 | Papyrus 로그 | `C:\Users\kkw10\OneDrive\Documents\My Games\Skyrim Special Edition\Logs\Script\Papyrus.0.log` |
