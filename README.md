@@ -1,6 +1,6 @@
-# Financial Hell - Skyrim Banking and Credit Overhaul
+# TOBACCO - Tamriel's Official Banking, Arrears, Credit & Collateral Overhaul
 
-스카이림(Skyrim) 내에서 동작하는 영지별 은행 금융 및 상인 외상(신용 거래) 시스템 오버홀 모드입니다.  
+스카이림(Skyrim) 내에서 동작하는 영지별 은행 금융, 연체, 신용 거래 및 담보 시스템 오버홀 모드입니다.  
 기존의 구형 Scaleform(Flash) UI 대신, 최신 웹 기술 기반의 **PrismaUI 프레임워크**를 채택하여 고해상도, 고반응성의 웹뷰 기반 금융 인터페이스를 제공합니다.
 
 ---
@@ -135,4 +135,4 @@ cmake --build build --config Release
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy.ps1
 ```
-* 컴파일된 런타임 파일(ESP, PEX, DLL, SEQ, Web Assets)들을 `C:\TAKEALOOK\mods\Financial Hell - Skyrim Banking and Credit Overhaul_dev build`로 완벽히 동기화합니다.
+* 컴파일된 런타임 파일(ESP, PEX, DLL, SEQ, Web Assets)들을 `C:\TAKEALOOK\mods\TOBACCO - Tamriel's Official Banking, Arrears, Credit & Collateral Overhaul_dev build`로 완벽히 동기화합니다.

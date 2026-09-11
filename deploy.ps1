@@ -9,7 +9,7 @@
 [CmdletBinding()]
 param(
     [string]$ModsRoot = 'C:\TAKEALOOK\mods',
-    [string]$ModName  = 'Financial Hell - Skyrim Banking and Credit Overhaul_dev build'
+    [string]$ModName  = "TOBACCO - Tamriel's Official Banking, Arrears, Credit & Collateral Overhaul_dev build"
 )
 
 $ErrorActionPreference = 'Stop'
