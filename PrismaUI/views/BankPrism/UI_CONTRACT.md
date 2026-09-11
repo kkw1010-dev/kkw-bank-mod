@@ -136,7 +136,11 @@ window.bankAction(payload)
   이유를 확인할 방법이 없다. 현재 쓰는 이름은 다음과 같다:
   - 배경 `bg/<holdKey>.jpg`
   - 문양 `emblems/<holdKey>.png`
-  - 야를(영주) 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
+  - 행정관 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5). **대출 탭 전용.** 화이트런은 프로벤투스
+  - 야를(영주) 초상화 `portraits/jarl-<holdKey>-t<단계>.jpg` (1~5). **신용등급 탭 전용**이고 대출 탭과는
+    별개의 DOM·이미지를 쓴다. 화이트런은 발그루프. 두 탭이 하나의 초상화를 공유했다가 대출 탭에도
+    야를이 뜨는 문제가 있었다 - 새 홀드에 이 초상화를 추가할 때 대출 탭용(행정관)과 신용등급 탭용(야를)
+    다섯 장씩 총 열 장이 필요하다는 뜻이다
   - 잡화상 초상화 `portraits/merchant-<holdKey>-t<단계>.jpg` (1~5)
   - 보증인 초상화 `portraits/guarantor-<holdKey>-<상태>.jpg`. 상태는 `default`(보증 전), `pledge`(창을 연 채
     방금 보증을 세움), `pledged`(보증 중 · 구상권 청구 후 연행 전), `jailed`(구금 중 · 석방 절차 중)다.

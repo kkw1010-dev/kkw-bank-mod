@@ -1396,14 +1396,27 @@
 
           <div class="steward-slot">
 
-            <!-- 3. 대출/신용등급 탭 전용: 신용등급 5단계 야를 발그루프 초상화 및 한줄 대사 -->
+            <!-- 3. 대출 탭 전용: 신용등급 5단계 프로벤투스 초상화 및 한줄 대사 -->
             <div class="portrait-view" id="right-loan">
               <div class="portrait-img-wrap">
-                <img id="portraitImg" class="portrait-img" src="portraits/whiterun-t2.jpg" alt="영주 초상화">
+                <img id="portraitImg" class="portrait-img" src="portraits/whiterun-t2.jpg" alt="행정관 초상화">
               </div>
               <div class="portrait-info">
-                <div class="portrait-dialogue" id="portraitQuote">"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."</div>
-                <div class="portrait-speaker" id="portraitSpeaker">야를 발그루프</div>
+                <div class="portrait-dialogue" id="portraitQuote">"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."</div>
+                <div class="portrait-speaker" id="portraitSpeaker">프로벤투스 아베니치</div>
+              </div>
+            </div>
+
+            <!-- 3b. 신용등급 탭 전용: 신용등급 5단계 야를 발그루프 초상화 및 한줄 대사.
+                 대출 탭과 별도 DOM/이미지를 쓴다 - 하나를 같이 쓰던 이전 버전은 대출 탭에도
+                 발그루프가 나오는 버그가 있었다 (신용등급 탭에만 넣어달라는 요청이었다). -->
+            <div class="portrait-view" id="right-grade">
+              <div class="portrait-img-wrap">
+                <img id="jarlPortraitImg" class="portrait-img" src="portraits/jarl-whiterun-t2.jpg" alt="영주 초상화">
+              </div>
+              <div class="portrait-info">
+                <div class="portrait-dialogue" id="jarlPortraitQuote">"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."</div>
+                <div class="portrait-speaker" id="jarlPortraitSpeaker">야를 발그루프</div>
               </div>
             </div>
 
@@ -1516,14 +1529,18 @@
     // credit tab shows the merchant portrait & speech.
     // collateral tab shows the appraiser reserved view.
     // deposit tab shows its reserved slot view.
+    // 대출 탭(프로벤투스)과 신용등급 탭(야를 발그루프)은 서로 다른 portrait-view를 쓴다 -
+    // 하나를 공유하면 둘 중 한쪽 탭에서만 맞는 얼굴이 뜨고 다른 쪽은 틀린 얼굴이 뜬다.
     var pView = document.getElementById('right-loan');
+    var gradeView = document.getElementById('right-grade');
     var dView = document.getElementById('right-deposit');
     var cView = document.getElementById('right-credit');
     var colView = document.getElementById('right-collateral');
     var badgeEl = document.getElementById('stewardBadge');
 
     if (name === 'loan' || name === 'grade') {
-      pView.className = 'portrait-view active';
+      pView.className = (name === 'loan') ? 'portrait-view active' : 'portrait-view';
+      gradeView.className = (name === 'grade') ? 'portrait-view active' : 'portrait-view';
       dView.className = 'portrait-view';
       cView.className = 'portrait-view';
       if (colView) colView.className = 'reserved-view';
@@ -1534,6 +1551,7 @@
       }
     } else if (name === 'credit') {
       pView.className = 'portrait-view';
+      gradeView.className = 'portrait-view';
       dView.className = 'portrait-view';
       cView.className = 'portrait-view active';
       if (colView) colView.className = 'reserved-view';
@@ -1544,6 +1562,7 @@
       }
     } else if (name === 'collateral') {
       pView.className = 'portrait-view';
+      gradeView.className = 'portrait-view';
       dView.className = 'portrait-view';
       cView.className = 'portrait-view';
       if (colView) colView.className = 'reserved-view active';
@@ -1554,6 +1573,7 @@
       }
     } else { // deposit
       pView.className = 'portrait-view';
+      gradeView.className = 'portrait-view';
       dView.className = 'portrait-view active';
       cView.className = 'portrait-view';
       if (colView) colView.className = 'reserved-view';
@@ -1950,12 +1970,15 @@
   var HOLD_KEYS = ['whiterun', 'haafingar', 'eastmarch', 'rift', 'reach',
                    'falkreath', 'hjaalmarch', 'pale', 'winterhold'];
 
-  /* Jarls whose portraits have been drawn. Any other hold borrows Whiterun's
-     art and is addressed by office rather than by name. */
-  var JARLS = { whiterun: '야를 발그루프' };
-  var STEWARDS = JARLS;
+  /* Stewards whose portraits have been drawn. Any other hold borrows Whiterun's
+     art and is addressed by office rather than by name. Used on the loan tab. */
+  var STEWARDS = { whiterun: '프로벤투스 아베니치' };
 
-  /* Balgruuf's dialogue per credit tier in Whiterun */
+  /* As STEWARDS, but the Jarl who appears on the credit-tier tab instead - the two
+     tabs used to share one portrait, which put Balgruuf on the loan tab too. */
+  var JARLS = { whiterun: '야를 발그루프' };
+
+  /* Balgruuf's dialogue per credit tier in Whiterun, grade tab only. */
   var BALGRUUF_QUOTES = {
     1: '"지금은 온 영지에 드래곤의 위협이 도사리는 비상시국이네. 신원도 증명되지 않은 외지인에게 화이트런의 금고를 열어줄 만큼 내 마음이 한가롭지 않다네. 융자 용건이라면 행정관과 알아서 해결하게."',
     2: '"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."',
@@ -1980,7 +2003,7 @@
       },
       grade: {
         '요르바스크의 전사': '"요르바스크의 명예로운 동료이자 용맹한 전사여. 그 강인한 기백은 드래곤스리치 금고보다도 든든한 신용 보증서라네."',
-        '탐리엘의 구원자': '"탐리엘의 구원자이자, 나의 영원한 형제여! 그대가 세상을 파멸에서 구했거늘, 화이트런의 금고가 어찌 그대의 요구를 거절하겠는가? 25,000 골드든 그 이상이든, 필요한 만큼 전부 가져가 영광스럽게 쓰게나."'
+        '탐리엘의 구원자': '"오, 탐리엘의 구원자이시여! 드래곤스리치 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."'
       }
     }
   };
@@ -1996,17 +2019,17 @@
   var GRADE_DATA = {
     '외지인': {
       pathKey: '',
-      quote: '"지금은 온 영지에 드래곤의 위협이 도사리는 비상시국이네. 신원도 증명되지 않은 외지인에게 화이트런의 금고를 열어줄 만큼 내 마음이 한가롭지 않다네. 융자 용건이라면 행정관과 알아서 해결하게."',
+      quote: '"신원도 불확실한 외지인에게 내줄 금화는 없네. 장난칠 생각 말고 당장 물러서게."',
       classType: 'bad'
     },
     '정체모를 용병': {
       pathKey: '',
-      quote: '"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."',
+      quote: '"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."',
       classType: 'mid'
     },
     '영지의 종사': {
       pathKey: 'path-3-thane',
-      quote: '"오, 화이트런의 종사여! 그대가 우리 영지를 위해 보여준 헌신은 내 이미 다 확인했네. 5,000 골드의 융자 자금은 그대의 명예에 비하면 아무것도 아니지. 편히 융통하게나."',
+      quote: '"아, 우리 영지의 정식 종사(Thane)이신 분이군요. 야를의 특별 보증 범위 안에서 정중히 모시겠습니다."',
       classType: 'good'
     },
     '신뢰받는 해결사': {
@@ -2016,7 +2039,7 @@
     },
     '스카이림의 영웅': {
       pathKey: 'path-4-mq',
-      quote: '"그대의 이름은 이미 드래곤즈리치의 벽을 흔들고 있네, 스카이림의 영웅이여! 그대와 같은 강자를 아군으로 둔 것은 화이트런 최고의 축복이지. 12,000 골드의 자금은 내 명으로 즉시 승인하겠네."',
+      quote: '"스카이림의 영웅을 맞이하게 되어 영광입니다. 야를의 뜻에 따라 원하시는 자금을 즉시 마련해 드리지요."',
       classType: 'good'
     },
     '요르바스크의 전사': {
@@ -2036,7 +2059,7 @@
     },
     '탐리엘의 구원자': {
       pathKey: 'path-5-mq',
-      quote: '"탐리엘의 구원자이자, 나의 영원한 형제여! 그대가 세상을 파멸에서 구했거늘, 화이트런의 금고가 어찌 그대의 요구를 거절하겠는가? 25,000 골드든 그 이상이든, 필요한 만큼 전부 가져가 영광스럽게 쓰게나."',
+      quote: '"오, 탐리엘의 구원자이시여! 영지의 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."',
       classType: 'good'
     },
     '컴패니언의 인도자': {
@@ -2092,7 +2115,8 @@
     var artEl = document.getElementById('art');
     if (artEl) { artEl.style.backgroundImage = "url('bg/" + holdKey + ".jpg')"; }
 
-    setText('portraitSpeaker', JARLS[holdKey] || (holdName + ' 야를'));
+    setText('portraitSpeaker', STEWARDS[holdKey] || (holdName + ' 행정관'));
+    setText('jarlPortraitSpeaker', JARLS[holdKey] || (holdName + ' 야를'));
     if (typeof updateMerchantPortrait === 'function') {
       updateMerchantPortrait(state.grade, state.tier);
     }
@@ -2113,14 +2137,8 @@
       imgEl.src = 'portraits/' + state.holdKey + '-t' + tier + '.jpg';
     }
 
-    var quote = '';
-    if (state.holdKey === 'whiterun' && BALGRUUF_QUOTES[tier]) {
-      quote = BALGRUUF_QUOTES[tier];
-    } else {
-      var seatGrade = (SEAT_TEXT[state.holdKey] || {}).grade || {};
-      quote = seatGrade[gradeName] || info.quote;
-    }
-    setText('portraitQuote', quote);
+    var seatGrade = (SEAT_TEXT[state.holdKey] || {}).grade || {};
+    setText('portraitQuote', seatGrade[gradeName] || info.quote);
 
     var badgeEl = document.getElementById('stewardBadge');
     if (badgeEl) {
@@ -2203,6 +2221,21 @@
     '대학의 아크메이지': '"마법의 정점에 서신 위대한 아크메이지를 뵙습니다! 영지의 최고 지성이자 보물 가득한 대학의 수장이시니, 제 가게의 신용 장부는 이제 온전히 나으리의 것입니다."',
     '전쟁 영웅 장군': '"스카이림에 전쟁의 종식을 가져다주신 최고 총사령관 각하! 군의 절대적인 신용 보증서가 제 장부에 꽂혔으니, 외상 한도는 무한이나 다름없습니다!"'
   };
+
+  /* 신용등급 탭 전용 야를 발그루프 초상화. 대출 탭의 프로벤투스(updateStewardPortrait)와는
+     별개의 DOM과 이미지 파일을 쓴다. 티어로만 갈리고 GRADE_DATA의 경로별 문안은 쓰지 않는다 -
+     발그루프의 반응은 "얼마나 잘사는가(티어)"고, 프로벤투스의 반응은 "무엇으로 그리 됐는가(경로)"다. */
+  function updateJarlPortrait(gradeName, tier) {
+    var imgEl = document.getElementById('jarlPortraitImg');
+    if (imgEl) {
+      imgEl.onerror = function () {
+        this.onerror = null;
+        this.src = 'portraits/jarl-whiterun-t' + tier + '.jpg';
+      };
+      imgEl.src = 'portraits/jarl-' + state.holdKey + '-t' + tier + '.jpg';
+    }
+    setText('jarlPortraitQuote', BALGRUUF_QUOTES[tier] || BALGRUUF_QUOTES[2]);
+  }
 
   function updateMerchantPortrait(gradeName, tier) {
     var quote = MERCHANT_QUOTES[gradeName] || MERCHANT_QUOTES['정체모를 용병'];
@@ -2369,6 +2402,7 @@
         if (data.grade !== undefined) { state.grade = data.grade; }
         if (data.tier !== undefined) { state.tier = data.tier; }
         updateStewardPortrait(state.grade, state.tier);
+        updateJarlPortrait(state.grade, state.tier);
         updateMerchantPortrait(state.grade, state.tier);
       }
       setText('trackBonus', state.paths > 1
@@ -2433,6 +2467,7 @@
   // Initial state, replaced by the game's first update.
   updateHold('화이트런', 'whiterun');
   updateStewardPortrait('정체모를 용병', 2);
+  updateJarlPortrait('정체모를 용병', 2);
   updateMerchantPortrait('정체모를 용병', 2);
   updateVaultDisplay(state.balance);
   updateLoanNote();
