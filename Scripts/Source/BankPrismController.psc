@@ -85,6 +85,7 @@ Int KeysTaken = 0
 ; properties, so the save format does not change.
 Bool GuarantorTransferPending = False
 Bool GuarantorJailed = False
+Bool GuarantorWaitTraced = False
 
 Bool Property bMenuOpen = False Auto
 Int Property CurrentHold = 0 Auto Hidden
@@ -171,7 +172,7 @@ Function ReportState()
         Trace("enabled holds: " + EnabledHoldList())
         ReportDialogueReach()
         Trace("collateral: ready=" + CollateralReady() + " owned=" + PropertyOwned(0) + " state=" + PropertyState(0) + " appraisal=" + PropertyAppraisal(0) + " credit=" + CollateralCredit(0) + " cellBound=" + (PropertyCell(0) != None) + " frontDoorBound=" + (BreezehomeFrontDoor != None) + " keyBound=" + (PropertyKey(0) != None) + " locked=" + LockoutApplied + " releaseFee=" + LienReleaseFee(0))
-        Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None) + " transferPending=" + GuarantorTransferPending + " jailed=" + GuarantorJailed + " jailMarker=" + (GuarantorJailMarker() != None))
+        Trace("guarantor: ready=" + GuarantorReady() + " appointed=" + GuarantorAppointed(0) + " alive=" + GuarantorAlive(0) + " state=" + GuarantorState(0) + " credit=" + GuarantorCredit(0) + " housecarlBound=" + (HousecarlWhiterun != None) + " transferPending=" + GuarantorTransferPending + " jailed=" + GuarantorJailed + " jailMarker=" + (GuarantorJailMarker() != None) + " " + GuarantorFollowerStatus())
     Else
         Trace("accounts: NOT BOUND - this save predates the current property set;"              + " a new game is required")
     EndIf
@@ -1592,6 +1593,7 @@ Function PledgeGuarantor()
     EndIf
 
     GuarantorPledges[CurrentHold].SetValueInt(1)
+    BlockGuarantorRecruit(CurrentHold)
     Int credit = GuarantorCredit(CurrentHold)
     Trace("guarantor: " + GuarantorName(CurrentHold) + " pledged, credit=" + credit)
     Refresh(GuarantorName(CurrentHold) + "를 연대보증인으로 등록했습니다. 대출 한도가 " + credit + " 골드 늘었습니다.")
@@ -1612,25 +1614,33 @@ Function ReleaseGuarantor()
     EndIf
 
     GuarantorPledges[CurrentHold].SetValueInt(0)
+    AllowGuarantorRecruit(CurrentHold)
     Trace("guarantor: " + GuarantorName(CurrentHold) + " released")
     Refresh(GuarantorName(CurrentHold) + "의 연대보증을 해제했습니다.")
 EndFunction
 
 Function ClaimGuarantorIfDue(Int aiHold)
     Int current = GuarantorState(aiHold)
+    If current == 2
+        ; A claim whose arrest is still waiting tries again on every bank visit and tick.
+        TryTransferGuarantor(aiHold, False)
+        Return
+    EndIf
     If current != 1 || !LoansReady()
         Return
     EndIf
-    If GetOverdueDays(aiHold) < GetForecloseDays()
+    ; The guarantor answers from the first day the loan is late, not after a week.
+    If !IsOverdue(aiHold)
         Return
     EndIf
     GuarantorPledges[aiHold].SetValueInt(2)
-    Trace("guarantor: " + GuarantorName(aiHold) + " claimed at " + GetOverdueDays(aiHold) + " days overdue")
+    Trace("guarantor: " + GuarantorName(aiHold) + " claimed, the loan has fallen due (" + GetOverdueDays(aiHold) + " whole days overdue)")
     Debug.Notification(GetHoldName(aiHold) + " 행정관이 연대보증인 " + GuarantorName(aiHold) + "에게 구상권을 청구했습니다.")
     If aiHold == 0
         GuarantorTransferPending = True
+        GuarantorWaitTraced = False
         RegisterForSleep()
-        Trace("guarantor: transfer to Dragonsreach jail waits for the player's next full sleep")
+        TryTransferGuarantor(aiHold, False)
     EndIf
 EndFunction
 
@@ -1660,10 +1670,26 @@ Event OnSleepStop(Bool abInterrupted)
         Trace("guarantor: sleep interrupted, transfer still waiting")
         Return
     EndIf
-    TransferGuarantorToJail(0)
+    TryTransferGuarantor(0, True)
 EndEvent
 
-Function TransferGuarantorToJail(Int aiHold)
+; While the arrest waits because the guarantor shares the player's cell, this checks every
+; few real seconds for the moment they no longer do. It is registered only while a
+; transfer is pending and stops once she has been taken.
+Event OnUpdate()
+    If GuarantorTransferPending
+        TryTransferGuarantor(0, False)
+    EndIf
+EndEvent
+
+Function WatchGuarantorCell()
+    RegisterForSingleUpdate(3.0)
+EndFunction
+
+; The guarantor is taken the moment the player cannot see it happen: at once if she is in
+; another cell, otherwise when the player finishes a night's sleep or the two stop sharing
+; a cell, whichever comes first.
+Function TryTransferGuarantor(Int aiHold, Bool abAfterSleep)
     If aiHold != 0 || !GuarantorTransferPending || GuarantorJailed
         Return
     EndIf
@@ -1685,26 +1711,105 @@ Function TransferGuarantorToJail(Int aiHold)
         Return
     EndIf
     If guarantor.IsInCombat()
-        Trace("guarantor: " + GuarantorName(aiHold) + " is in combat, transfer waits for the next sleep")
+        WatchGuarantorCell()
         Return
     EndIf
 
-    ; A current follower is pulled straight back to the player, so she is dismissed
-    ; through vanilla's own follower quest first. No dismissal line, no wait.
-    Quest followerQuest = Game.GetForm(0x000750BA) as Quest
-    DialogueFollowerScript followers = followerQuest as DialogueFollowerScript
-    If followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == guarantor
-        followers.DismissFollower(0, 0)
-        Trace("guarantor: " + GuarantorName(aiHold) + " dismissed as the player's follower before the transfer")
+    Cell playerCell = Game.GetPlayer().GetParentCell()
+    If !abAfterSleep && playerCell != None && guarantor.GetParentCell() == playerCell
+        If !GuarantorWaitTraced
+            GuarantorWaitTraced = True
+            Trace("guarantor: " + GuarantorName(aiHold) + " is in the player's cell, arrest waits for sleep or for the cell to change")
+        EndIf
+        WatchGuarantorCell()
+        Return
     EndIf
+
+    ; Recruitment is closed from the pledge on, but another script may have made her a
+    ; follower since; vanilla's own dismissal comes first either way.
+    DismissGuarantorIfFollowing(aiHold)
 
     guarantor.MoveTo(marker)
     guarantor.SetDontMove(True)
     guarantor.SetRestrained(True)
     GuarantorTransferPending = False
+    GuarantorWaitTraced = False
     GuarantorJailed = True
-    Trace("guarantor: " + GuarantorName(aiHold) + " moved to the Dragonsreach jail marker and held there")
-    Debug.Notification("밤사이 화이트런 경비대가 " + GuarantorName(aiHold) + "를 드래곤스리치 감옥으로 연행했습니다.")
+    If abAfterSleep
+        Trace("guarantor: " + GuarantorName(aiHold) + " moved to the Dragonsreach jail marker after the player slept, and held there")
+        Debug.Notification("밤사이 화이트런 경비대가 " + GuarantorName(aiHold) + "를 드래곤스리치 감옥으로 연행했습니다.")
+    Else
+        Trace("guarantor: " + GuarantorName(aiHold) + " moved to the Dragonsreach jail marker out of the player's sight, and held there")
+        Debug.Notification("화이트런 경비대가 " + GuarantorName(aiHold) + "를 드래곤스리치 감옥으로 연행했습니다.")
+    EndIf
+EndFunction
+
+Bool Function DismissGuarantorIfFollowing(Int aiHold)
+    If aiHold != 0 || HousecarlWhiterun == None
+        Return False
+    EndIf
+    Quest followerQuest = Game.GetForm(0x000750BA) as Quest
+    DialogueFollowerScript followers = followerQuest as DialogueFollowerScript
+    If followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == HousecarlWhiterun
+        followers.DismissFollower(0, 0)
+        Trace("guarantor: " + GuarantorName(aiHold) + " dismissed as the player's follower")
+        Return True
+    EndIf
+    Return False
+EndFunction
+
+Faction Function PotentialFollowerFaction()
+    Return Game.GetForm(0x0005C84D) as Faction
+EndFunction
+
+; A pledged guarantor cannot be recruited. Vanilla's follow-me topic,
+; DialogueFavorGenericFollowBranchTopic, asks for PotentialFollowerFaction = 1 and
+; CurrentFollowerFaction = 0 (`usage 05C84D`, `info 05C829`); the housecarl lines gated on
+; PlayerHousecarlFaction are a greeting and a reply for someone already following. Lydia
+; holds PotentialFollowerFaction at rank 0 in her base record, so removing her closes the
+; topic and adding her back reopens it.
+Function BlockGuarantorRecruit(Int aiHold)
+    If aiHold != 0 || HousecarlWhiterun == None
+        Return
+    EndIf
+    DismissGuarantorIfFollowing(aiHold)
+    Faction potential = PotentialFollowerFaction()
+    If potential != None
+        HousecarlWhiterun.RemoveFromFaction(potential)
+    EndIf
+    Trace("guarantor: " + GuarantorName(aiHold) + " closed to recruitment while pledged")
+EndFunction
+
+Function AllowGuarantorRecruit(Int aiHold)
+    If aiHold != 0 || HousecarlWhiterun == None
+        Return
+    EndIf
+    Faction potential = PotentialFollowerFaction()
+    If potential != None
+        HousecarlWhiterun.AddToFaction(potential)
+    EndIf
+    Trace("guarantor: " + GuarantorName(aiHold) + " open to recruitment again")
+EndFunction
+
+String Function GuarantorFollowerStatus()
+    If HousecarlWhiterun == None
+        Return "followerStatus=unbound"
+    EndIf
+    Faction potential = PotentialFollowerFaction()
+    Faction current = Game.GetForm(0x0005C84E) as Faction
+    String status = "potentialFollowerRank="
+    If potential != None
+        status += HousecarlWhiterun.GetFactionRank(potential)
+    Else
+        status += "?"
+    EndIf
+    status += " currentFollowerRank="
+    If current != None
+        status += HousecarlWhiterun.GetFactionRank(current)
+    Else
+        status += "?"
+    EndIf
+    Return status
 EndFunction
 
 Function ReleaseGuarantorFromJail(Int aiHold)

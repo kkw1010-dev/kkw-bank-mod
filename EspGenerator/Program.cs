@@ -1433,7 +1433,7 @@ namespace EspGenerator
             var guarantorPledges = new List<GlobalFloat>();
             for (uint i = 0; i < holds.Length; i++)
                 guarantorPledges.Add(NewGlobal(IdGuarantorPledgeBase + i, "BankGuarantor" + holds[i].name));
-            var guarantorCredit = NewGlobal(IdGuarantorCredit, "BankGuarantorCreditWhiterun", 2000f);
+            var guarantorCredit = NewGlobal(IdGuarantorCredit, "BankGuarantorCreditWhiterun", 3000f);
 
             var loanTermDays = NewGlobal(IdLoanTermDays, "BankLoanTermDays", 7f);
             // Charged per DAY overdue, on the original sum. A weekly charge left the

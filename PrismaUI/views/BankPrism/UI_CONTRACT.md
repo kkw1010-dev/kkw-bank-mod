@@ -42,14 +42,14 @@ window.bankUpdateParams(jsonString)
 | `lienReleaseFee` | 정수 | 근저당 해지 수수료(골드) |
 | `lienFeePercent` | 정수 | 그 수수료가 감정가의 몇 %인지 |
 | `propertyLocked` | 정수 | 압류로 문이 잠기고 열쇠를 회수했으면 1. 압류 순간 집 안에 있었다면 나올 때까지 0 |
-| `guarantorPending` | 정수 | 구상권이 청구되어, 플레이어가 다음에 푹 자면 보증인이 감옥으로 연행될 상태면 1 |
+| `guarantorPending` | 정수 | 구상권이 청구되었는데 보증인이 플레이어와 같은 셀에 있어 연행을 기다리는 중이면 1 |
 | `guarantorJailed` | 정수 | 보증인이 드래곤스리치 감옥에 구금되어 있으면 1 |
 | `propertyName` | 문자열 | 집 이름 (브리즈홈). 없는 홀드는 빈 문자열 |
 | `guarantorAppointed` | 정수 | 종사(Thane)로 임명되어 하우스칼을 하사받았으면 1. 지금은 화이트런(리디아)만 |
 | `guarantorAlive` | 정수 | 보증인이 살아있으면 1, 사망했으면 0 |
 | `guarantorState` | 정수 | 0 미보증 · 1 보증 중 · 2 연체로 구상권 집행됨 |
 | `guarantorCredit` | 정수 | 보증으로 늘어난 대출 한도. `loanLimit`에 이미 포함되어 있다 |
-| `guarantorCreditAmount` | 정수 | 이 홀드 보증인의 기본 보증 한도 (2,000 G) |
+| `guarantorCreditAmount` | 정수 | 이 홀드 보증인의 기본 보증 한도 (3,000 G) |
 | `guarantorName` | 문자열 | 보증인 이름 (리디아) |
 | `guarantorTitle` | 문자열 | 보증인 직책 (화이트런 하우스칼) |
 
