@@ -1748,14 +1748,63 @@ Bool Function DismissGuarantorIfFollowing(Int aiHold)
     If aiHold != 0 || HousecarlWhiterun == None
         Return False
     EndIf
+
+    Faction curFollowerFaction = Game.GetForm(0x0005C84E) as Faction ; CurrentFollowerFaction
+    Bool isFollower = HousecarlWhiterun.IsPlayerTeammate()
+    If !isFollower && curFollowerFaction != None && HousecarlWhiterun.IsInFaction(curFollowerFaction)
+        isFollower = True
+    EndIf
+
     Quest followerQuest = Game.GetForm(0x000750BA) as Quest
     DialogueFollowerScript followers = followerQuest as DialogueFollowerScript
-    If followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == HousecarlWhiterun
-        followers.DismissFollower(0, 0)
-        Trace("guarantor: " + GuarantorName(aiHold) + " dismissed as the player's follower")
-        Return True
+    If !isFollower && followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == HousecarlWhiterun
+        isFollower = True
     EndIf
-    Return False
+
+    If !isFollower
+        Return False
+    EndIf
+
+    ; SFEAE (Simple Follower Extension AE) compatibility
+    Quest sfeQuest = Game.GetFormFromFile(0x800, "SimpleFollowerExtensionAE.esp") as Quest
+    If sfeQuest != None && sfeQuest.IsRunning()
+        SFEAE_scrMainControl sfe = sfeQuest as SFEAE_scrMainControl
+        If sfe != None
+            sfe.actLastTalk = HousecarlWhiterun
+            If followers != None
+                followers.DismissFollower(0, 0)
+            EndIf
+            sfe.actLastTalk = None
+            sfe.UnregisterFollower(HousecarlWhiterun)
+        EndIf
+    ElseIf followers != None && followers.pFollowerAlias != None && followers.pFollowerAlias.GetActorRef() == HousecarlWhiterun
+        followers.DismissFollower(0, 0)
+    EndIf
+
+    ; Universal teammate and faction cleanup
+    Faction dismissedFaction = Game.GetForm(0x00084D1B) as Faction ; DismissedFollowerFaction
+    Faction hirelingFaction = Game.GetForm(0x000BD738) as Faction  ; CurrentHireling
+    Faction commentFaction = Game.GetForm(0x000750B8) as Faction   ; WIFollowerCommentFaction
+
+    HousecarlWhiterun.StopCombatAlarm()
+    HousecarlWhiterun.SetPlayerTeammate(False)
+    If curFollowerFaction != None
+        HousecarlWhiterun.RemoveFromFaction(curFollowerFaction)
+    EndIf
+    If hirelingFaction != None
+        HousecarlWhiterun.RemoveFromFaction(hirelingFaction)
+    EndIf
+    If commentFaction != None
+        HousecarlWhiterun.RemoveFromFaction(commentFaction)
+    EndIf
+    If dismissedFaction != None
+        HousecarlWhiterun.AddToFaction(dismissedFaction)
+    EndIf
+    HousecarlWhiterun.SetActorValue("WaitingForPlayer", 0)
+    HousecarlWhiterun.EvaluatePackage()
+
+    Trace("guarantor: " + GuarantorName(aiHold) + " dismissed as the player's follower")
+    Return True
 EndFunction
 
 Faction Function PotentialFollowerFaction()
@@ -1809,6 +1858,7 @@ String Function GuarantorFollowerStatus()
     Else
         status += "?"
     EndIf
+    status += " teammate=" + HousecarlWhiterun.IsPlayerTeammate()
     Return status
 EndFunction
 

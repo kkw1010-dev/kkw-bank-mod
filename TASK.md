@@ -237,8 +237,7 @@ UI의 "채권 매각" 버튼은 지금 안내 문구만 띄운다. 대상 모드
 - **근저당은 해지할 때만 수수료를 낸다.** 감정가의 20%(`BankLienReleaseFeePercent`), 브리즈홈이면
   1,000. 설정은 무료다. 대출을 갚아도, 압류가 풀려도 근저당은 남고 해지는 따로 신청한다
 - **연대보증은 브리즈홈 근저당과 별개로 동작한다.** 보증 한도는 3,000(`BankGuarantorCreditWhiterun`)
-- **보증을 세우는 순간 리디아는 동료가 될 수 없다.** 동행 중이면 바닐라 `DialogueFollower`(`0750BA`)의
-  `DismissFollower(0, 0)`로 즉시 해산하고, `PotentialFollowerFaction`에서 빼서 영입 선택지를 닫는다.
+- **보증을 세우는 순간 리디아는 동료가 될 수 없다.** 동행 중이면 즉시 해산하고(`Simple Follower Extension AE` 호환 및 바닐라 `DialogueFollower` 호출, 엔진 차원 `SetPlayerTeammate(False)` 및 팩션/대기 초기화), `PotentialFollowerFaction`에서 빼서 영입 선택지를 닫는다.
   바닐라 영입 토픽 `DialogueFavorGenericFollowBranchTopic`이 이 팩션 =1, `CurrentFollowerFaction` =0을
   요구하기 때문이다(`usage 05C84D`, `info 05C829`). 하우스칼 전용 대사는 인사말과 이미 동행 중일 때의
   응답뿐이라 영입 경로가 아니다. 보증을 해제하면 팩션을 되돌린다
