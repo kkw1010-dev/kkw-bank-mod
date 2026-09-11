@@ -44,6 +44,7 @@ window.bankUpdateParams(jsonString)
 | `propertyLocked` | 정수 | 압류로 문이 잠기고 열쇠를 회수했으면 1. 압류 순간 집 안에 있었다면 나올 때까지 0 |
 | `guarantorPending` | 정수 | 구상권이 청구되었는데 보증인이 플레이어와 같은 셀에 있어 연행을 기다리는 중이면 1 |
 | `guarantorJailed` | 정수 | 보증인이 드래곤스리치 감옥에 구금되어 있으면 1 |
+| `guarantorReleasePending` | 정수 | 완납 뒤 석방 절차가 진행 중이면 1. 장부상으로는 이미 풀렸고(`guarantorState` 1), 보증인은 게임 시간 1시간 뒤 플레이어가 보지 않는 곳에서 감방을 나온다. 그때 `guarantorJailed`와 함께 0이 된다 |
 | `propertyName` | 문자열 | 집 이름 (브리즈홈). 없는 홀드는 빈 문자열 |
 | `guarantorAppointed` | 정수 | 종사(Thane)로 임명되어 하우스칼을 하사받았으면 1. 지금은 화이트런(리디아)만 |
 | `guarantorAlive` | 정수 | 보증인이 살아있으면 1, 사망했으면 0 |
@@ -137,6 +138,9 @@ window.bankAction(payload)
   - 문양 `emblems/<holdKey>.png`
   - 행정관 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
   - 잡화상 초상화 `portraits/merchant-<holdKey>-t<단계>.jpg` (1~5)
+  - 보증인 초상화 `portraits/guarantor-<holdKey>-<상태>.jpg`. 상태는 `default`(보증 전), `pledge`(창을 연 채
+    방금 보증을 세움), `pledged`(보증 중 · 구상권 청구 후 연행 전), `jailed`(구금 중 · 석방 절차 중)다.
+    대사는 `BankView.html`의 `GUARANTOR_VOICE`에, 석방 절차 안내문은 `GUARANTOR_RELEASE_NOTICE`에 있다
   - 금고 그림 `vault/vault-t<단계>.jpg` (1~5). 이것만은 홀드가 아니라 예금액으로
     고른다 (1,001 / 5,001 / 15,001 / 30,001 골드가 경계)
 

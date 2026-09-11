@@ -670,6 +670,36 @@
       line-height: 22px;
     }
 
+    /* The guarantor's face and words on her card, one pair per state of the guarantee. */
+    .guar-voice {
+      display: flex;
+      gap: 14px;
+      margin: 2px 0 12px;
+      align-items: stretch;
+    }
+    .guar-portrait {
+      flex: 0 0 360px;
+      width: 360px;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+    }
+    .guar-voice-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.28);
+      border-left: 3px solid var(--gold-dim);
+      padding: 10px 16px;
+      border-radius: 4px;
+    }
+    .guar-voice-text .portrait-dialogue { font-size: 16px; line-height: 25px; }
+    .guar-voice-text .portrait-speaker { margin-top: 6px; }
+    .col-card-desc.guar-notice { color: #e0d8c7; }
+    .col-card-desc.guar-notice b { color: var(--gold); }
+
     .col-action-row {
       display: flex;
       gap: 10px;
@@ -1175,6 +1205,13 @@
                   <span>추심 기준 <b id="guarForeclose">—</b></span>
                   <span>보증 해지 <b id="guarFee">수수료 없음</b></span>
                 </div>
+                <div class="guar-voice" id="guarVoice" style="display: none;">
+                  <img id="guarPortrait" class="guar-portrait" src="portraits/guarantor-whiterun-default.jpg" alt="보증인 초상화">
+                  <div class="guar-voice-text" id="guarVoiceText">
+                    <div class="portrait-dialogue" id="guarQuote"></div>
+                    <div class="portrait-speaker" id="guarSpeaker">리디아 · 화이트런 하우스칼</div>
+                  </div>
+                </div>
                 <div class="col-card-desc" id="guarDesc">게임에서 아직 정보가 오지 않았습니다.</div>
                 <div class="grade-warning-badge" id="guarWarning" style="display: none; margin-top: 4px; margin-bottom: 8px;"></div>
                 <div class="col-action-row">
@@ -1433,7 +1470,7 @@
     propertyOwned: 0, propertyState: 0, propertyValue: 0, collateralCredit: 0,
     ltv: 60, forecloseDays: 7, propertyName: '', lienReleaseFee: 0, lienFeePercent: 20, propertyLocked: 0,
     guarantorAppointed: 0, guarantorAlive: 1, guarantorState: 0, guarantorCredit: 0, guarantorCreditAmount: 3000,
-    guarantorName: '리디아', guarantorTitle: '화이트런 하우스칼', guarantorPending: 0, guarantorJailed: 0,
+    guarantorName: '리디아', guarantorTitle: '화이트런 하우스칼', guarantorPending: 0, guarantorJailed: 0, guarantorReleasePending: 0,
     received: false
   };
   var amount = 0;
@@ -1444,6 +1481,16 @@
 
   function comma(n) {
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  /* Korean object/subject/topic markers depend on whether the preceding syllable ends in a
+     consonant (받침). guarName is a fixed string today ("리디아", no 받침), but is driven by
+     GuarantorName() in Papyrus, which returns a different name per hold once more are wired
+     up - so this picks the marker instead of hard-coding one for the batchim-less case. */
+  function josa(name, withBatchim, withoutBatchim) {
+    var ch = (name || '').charCodeAt((name || '').length - 1);
+    if (ch < 0xAC00 || ch > 0xD7A3) { return withoutBatchim; } // not a Hangul syllable block
+    return ((ch - 0xAC00) % 28 !== 0) ? withBatchim : withoutBatchim;
   }
 
   function setStatus(text, isWarning) {
@@ -1564,6 +1611,66 @@
     sendAction('releaseGuarantor', 0);
   }
 
+  /* What the guarantor says on her card, by the state of the guarantee. Art is per hold like
+     the steward's - portraits/guarantor-<holdKey>-<state>.jpg - with the same fall-back to
+     Whiterun's set. focus is the object-position that keeps her face in the frame: the four
+     pictures are each cut to a different shape. */
+  var GUARANTOR_VOICE = {
+    whiterun: {
+      speaker: '리디아 · 화이트런 하우스칼',
+      'default': { focus: '50% 30%', quote: '"저는 당신의 짐을 지기로 맹세했습니다, 종사님. 무슨 일이든 말씀만 하십시오."' },
+      pledge:    { focus: '50% 24%', quote: '"꼭… 꼭 그래야만 하시나요, 종사님? 저는 당신의 칼이자 방패로 맹세한 몸입니다만… 제 맹세에 이런 수치스러운 보증까지 포함되어 있을 줄은 몰랐군요. 하아,, 알겠습니다."' },
+      pledged:   { focus: '48% 30%', quote: '"하아,, 제가 당신의 금융 보증서가 되어 드리는 것까진 좋습니다만… 부디 오래 끌지 마시고 조속히 정산해 주십시오. 허스칼이 담보로 묶여 있는 건 전사에게 어울리지 않습니다."' },
+      jailed:    { focus: '50% 30%', quote: '"종사님! 저를 정말 이 어둡고 축축한 지하 감옥에 담보로 처박아 두실 생각이었습니까? 당신의 명예와 제 맹세가 고작 감옥 창살 뒤에 갇히는 결말이라니… 당장 빚을 정산하고 절 여기서 꺼내 주십시오!"' }
+    }
+  };
+
+  // Shown on the card from full repayment until the guarantor is actually let out, which the
+  // game does an hour of game time later, somewhere the player cannot see it happen.
+  var GUARANTOR_RELEASE_NOTICE =
+    '<b>근저당 해제 및 담보 석방 신청이 정상 접수되었습니다.</b><br><br>'
+    + '야를 행정관실의 최종 장부 대조 및 공인 서류 정산 절차가 진행 중입니다. '
+    + '행정 수속 완료까지 <b>약 1시간</b>이 소요되며, 절차가 완료되는 대로 담보 대상이 즉시 해제됩니다.';
+
+  // A pledge signed while the window is open gets her reluctant line until the window closes;
+  // after that the card shows the settled-in line. Only a change seen live counts, so a
+  // window that opens on an existing pledge does not replay the moment of signing.
+  var guarantorJustPledged = false;
+  var guarantorStateSeen = false;
+
+  function updateGuarantorVoice(appointed, alive, st) {
+    var box = document.getElementById('guarVoice');
+    if (!box) { return; }
+    // Not yet the player's housecarl, or dead: nobody to speak on this card.
+    if (!appointed || !alive) { box.style.display = 'none'; return; }
+
+    var key;
+    if (state.guarantorJailed > 0) { key = 'jailed'; }
+    else if (st === 1 && guarantorJustPledged) { key = 'pledge'; }
+    else if (st === 1 || st === 2) { key = 'pledged'; }
+    else { key = 'default'; }
+
+    var voice = GUARANTOR_VOICE[state.holdKey] || GUARANTOR_VOICE.whiterun;
+    var line = voice[key];
+    var img = document.getElementById('guarPortrait');
+    if (img) {
+      img.onerror = function () {
+        this.onerror = null;
+        this.src = 'portraits/guarantor-whiterun-' + key + '.jpg';
+      };
+      img.src = 'portraits/guarantor-' + state.holdKey + '-' + key + '.jpg';
+      img.style.objectPosition = line.focus;
+    }
+
+    // During the release procedure the card carries the court's notice instead: her jail
+    // line demands a settlement that has already been made.
+    var textBox = document.getElementById('guarVoiceText');
+    if (textBox) { textBox.style.display = (state.guarantorReleasePending > 0) ? 'none' : ''; }
+    setText('guarQuote', line.quote);
+    setText('guarSpeaker', voice.speaker);
+    box.style.display = '';
+  }
+
   function updateCollateral() {
     var owned = state.propertyOwned > 0;
     var st = state.propertyState;
@@ -1663,22 +1770,25 @@
       gWarn = '⚔️ 발그루프 영주에게 종사 임명을 받고 하우스칼을 배속받으십시오.';
     } else if (!guarAlive) {
       gPillText = '사망'; gPillClass = 'seized'; gCardClass = 'col-card';
-      gDesc = '보증인 ' + guarName + '이(가) 사망하여 연대보증 효력이 상실되었습니다.';
+      gDesc = '보증인 ' + guarName + josa(guarName, '이', '가') + ' 사망하여 연대보증 효력이 상실되었습니다.';
       gWarn = '⚠️ 사망한 보증인은 채무를 보증할 수 없습니다.';
+    } else if (state.guarantorReleasePending > 0) {
+      gPillText = '석방 절차 중'; gPillClass = 'seized'; gCardClass = 'col-card';
+      gDesc = '';
     } else if (guarSt === 1) {
       gPillText = '보증 중'; gPillClass = 'active'; gCardClass = 'col-card pledged';
-      gDesc = guarTitle + ' ' + guarName + '이(가) 채무를 보증하고 있습니다. 대출 한도가 ' + comma(guarPotential) + ' G 늘어났습니다.';
-      gWarn = '⚠️ 연체가 시작되면 행정관이 보증인에게 구상권을 청구하고 경비대가 ' + guarName + '을(를) 드래곤스리치 감옥으로 연행합니다. 보증 기간 동안 ' + guarName + '은(는) 동료로 데려갈 수 없습니다.';
+      gDesc = guarTitle + ' ' + guarName + josa(guarName, '이', '가') + ' 채무를 보증하고 있습니다. 대출 한도가 ' + comma(guarPotential) + ' G 늘어났습니다.';
+      gWarn = '⚠️ 연체가 시작되면 행정관이 보증인에게 구상권을 청구하고 경비대가 ' + guarName + josa(guarName, '을', '를') + ' 드래곤스리치 감옥으로 연행합니다. 보증 기간 동안 ' + guarName + josa(guarName, '은', '는') + ' 동료로 데려갈 수 없습니다.';
     } else if (guarSt === 2) {
       gPillText = state.guarantorJailed > 0 ? '구금' : '구상권 청구'; gPillClass = 'seized'; gCardClass = 'col-card';
       gDesc = '연체로 행정관이 보증인 ' + guarName + '에게 구상권을 집행했습니다. '
         + (state.guarantorJailed > 0
-          ? guarName + '은(는) 드래곤스리치 감옥에 구금되어 있습니다.'
-          : '경비대가 ' + guarName + '을(를) 드래곤스리치 감옥으로 연행합니다. 플레이어와 같은 곳에 있으면, 플레이어가 잠들거나 그곳을 벗어나는 순간 연행합니다.');
-      gWarn = '⚠️ 대출을 전액 상환하면 ' + guarName + '이(가) 풀려나고 보증 효력이 복원됩니다.';
+          ? guarName + josa(guarName, '은', '는') + ' 드래곤스리치 감옥에 구금되어 있습니다.'
+          : '경비대가 ' + guarName + josa(guarName, '을', '를') + ' 드래곤스리치 감옥으로 연행합니다. 플레이어와 같은 곳에 있으면, 플레이어가 잠들거나 그곳을 벗어나는 순간 연행합니다.');
+      gWarn = '⚠️ 대출을 전액 상환하면 ' + guarName + josa(guarName, '이', '가') + ' 풀려나고 보증 효력이 복원됩니다.';
     } else {
       gPillText = '보증 가능'; gPillClass = 'available'; gCardClass = 'col-card available';
-      gDesc = guarTitle + ' ' + guarName + '을(를) 연대보증인으로 등록하면 대출 한도가 ' + comma(guarPotential) + ' G 늘어납니다.';
+      gDesc = guarTitle + ' ' + guarName + josa(guarName, '을', '를') + ' 연대보증인으로 등록하면 대출 한도가 ' + comma(guarPotential) + ' G 늘어납니다.';
       gWarn = '🛡️ 등록은 무료입니다. 등록하는 순간 ' + guarName + '의 동행이 해산되고, 보증을 해제할 때까지 동료로 데려갈 수 없습니다. 해제는 대출을 모두 갚은 뒤에 할 수 있습니다.';
     }
 
@@ -1687,6 +1797,16 @@
     var gCard = document.getElementById('guarCard');
     if (gCard) { gCard.className = gCardClass; }
     setText('guarDesc', gDesc);
+    var gDescEl = document.getElementById('guarDesc');
+    if (gDescEl) {
+      if (state.guarantorReleasePending > 0) {
+        gDescEl.innerHTML = GUARANTOR_RELEASE_NOTICE;
+        gDescEl.className = 'col-card-desc guar-notice';
+      } else {
+        gDescEl.className = 'col-card-desc';
+      }
+    }
+    updateGuarantorVoice(guarAppointed, guarAlive, guarSt);
     var gWarnEl = document.getElementById('guarWarning');
     if (gWarnEl) { gWarnEl.innerText = gWarn; gWarnEl.style.display = gWarn ? '' : 'none'; }
 
@@ -1734,11 +1854,26 @@
     sendAction(action, amount);
   }
 
+  // Every action is answered by a bankUpdateParams call. When that answer does not come,
+  // the status line says so instead of leaving a click that looks ignored: the pledge that
+  // needed two clicks was a Papyrus handler held behind a wait, and nothing on screen said
+  // the first click had even arrived.
+  var awaitingGame = null;
+
   // Exposed by the SKSE plugin via RegisterJSListener(view, "bankAction", ...).
   function sendAction(actionName, value) {
+    if (actionName === 'close') { guarantorJustPledged = false; }
     var payload = (value > 0) ? (actionName + ':' + value) : actionName;
     if (typeof window.bankAction === 'function') {
       window.bankAction(payload);
+      if (actionName !== 'close') {
+        if (awaitingGame) { clearTimeout(awaitingGame); }
+        setStatus('처리 중입니다...', false);
+        awaitingGame = setTimeout(function () {
+          awaitingGame = null;
+          setStatus('게임이 응답하지 않습니다. 창을 닫았다 다시 열어 주십시오. (Papyrus 로그의 ui 줄)', true);
+        }, 4000);
+      }
     } else {
       setStatus('게임과 연결되지 않았습니다.', true);
     }
@@ -2167,6 +2302,7 @@
 
       // First word from the game clears the "nothing has arrived" warning above.
       if (!state.received) { state.received = true; setStatus('', false); }
+      if (awaitingGame) { clearTimeout(awaitingGame); awaitingGame = null; }
 
       if (data.holdKey !== undefined || data.hold !== undefined) {
         state.hold = (data.hold !== undefined) ? data.hold : state.hold;
@@ -2235,14 +2371,20 @@
       if (data.propertyLocked !== undefined) { state.propertyLocked = data.propertyLocked; }
       if (data.guarantorAppointed !== undefined) { state.guarantorAppointed = data.guarantorAppointed; }
       if (data.guarantorAlive !== undefined) { state.guarantorAlive = data.guarantorAlive; }
-      if (data.guarantorState !== undefined) { state.guarantorState = data.guarantorState; }
+      if (data.guarantorState !== undefined) {
+        if (guarantorStateSeen && state.guarantorState === 0 && data.guarantorState === 1) { guarantorJustPledged = true; }
+        if (data.guarantorState !== 1) { guarantorJustPledged = false; }
+        state.guarantorState = data.guarantorState;
+        guarantorStateSeen = true;
+      }
+      if (data.guarantorReleasePending !== undefined) { state.guarantorReleasePending = data.guarantorReleasePending; }
       if (data.guarantorCredit !== undefined) { state.guarantorCredit = data.guarantorCredit; }
       if (data.guarantorCreditAmount !== undefined) { state.guarantorCreditAmount = data.guarantorCreditAmount; }
       if (data.guarantorName !== undefined) { state.guarantorName = data.guarantorName; }
       if (data.guarantorTitle !== undefined) { state.guarantorTitle = data.guarantorTitle; }
       if (data.guarantorPending !== undefined) { state.guarantorPending = data.guarantorPending; }
       if (data.guarantorJailed !== undefined) { state.guarantorJailed = data.guarantorJailed; }
-      if (data.propertyOwned !== undefined || data.propertyState !== undefined || data.guarantorState !== undefined || data.guarantorAppointed !== undefined) { updateCollateral(); }
+      if (data.propertyOwned !== undefined || data.propertyState !== undefined || data.guarantorState !== undefined || data.guarantorAppointed !== undefined || data.guarantorJailed !== undefined || data.guarantorReleasePending !== undefined) { updateCollateral(); }
 
       // Each activity keeps its own book, so a figure is always explained by the
       // lines directly beneath it rather than in a separate combined ledger.

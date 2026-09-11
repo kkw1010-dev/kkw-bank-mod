@@ -20,6 +20,9 @@ $dest = Join-Path $ModsRoot $ModName
 # fragment is deployed without anyone remembering to edit this script.
 $files = @(
     'BankPrismUI.esp'
+    # Written by the generator beside the plugin. Without it the steward topic is missing
+    # from any game started straight after launching Skyrim - see WriteAndCheckSeq.
+    'SEQ\BankPrismUI.seq'
     'SKSE\Plugins\BankPrismNative.dll'
 )
 
@@ -51,6 +54,18 @@ foreach ($rel in $files) {
     Copy-Item -Path $src -Destination $dst -Force
     Write-Host "  $rel"
 }
+
+# Read every copied file back against its source. A copy that did not land - a file held
+# open by MO2 or the game - otherwise shows up only as the game quietly running the last
+# build, which is found in game or not at all.
+$differs = @($files | Where-Object {
+    (Get-FileHash -LiteralPath (Join-Path $repo $_)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $dest $_)).Hash
+})
+if ($differs.Count -gt 0) {
+    foreach ($d in $differs) { Write-Host "NOT DEPLOYED: $d" }
+    throw "$($differs.Count) file(s) differ from the repository after copying."
+}
+Write-Host "  verified: all $($files.Count) files identical to the repository"
 
 # The view folder is generated entirely from the repository, so anything in the
 # deployed copy that is no longer in the repository is left over from an earlier

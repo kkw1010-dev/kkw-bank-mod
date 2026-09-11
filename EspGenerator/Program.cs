@@ -425,6 +425,261 @@ namespace EspGenerator
                 return;
             }
 
+            // The active MO2 load order, each plugin resolved to the file the game actually
+            // reads: overwrite first, then enabled mods from the highest priority down (the top
+            // of modlist.txt), then Stock Game\Data. "Who else touches this actor" can only be
+            // answered against the user's real modlist, not against Skyrim.esm alone.
+            static List<(string name, string path)> DiagLoadOrder()
+            {
+                const string root = @"C:\TAKEALOOK";
+                string profileDir = Path.Combine(root, "profiles", "TKL - MUNG ADDON");
+                var located = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                void IndexDir(string dir)
+                {
+                    if (!Directory.Exists(dir)) return;
+                    foreach (var f in Directory.EnumerateFiles(dir))
+                    {
+                        var ext = Path.GetExtension(f).ToLowerInvariant();
+                        if (ext is ".esp" or ".esm" or ".esl") located.TryAdd(Path.GetFileName(f), f);
+                    }
+                }
+                IndexDir(Path.Combine(root, "overwrite"));
+                foreach (var line in File.ReadLines(Path.Combine(profileDir, "modlist.txt")))
+                    if (line.StartsWith("+")) IndexDir(Path.Combine(root, "mods", line.Substring(1)));
+                IndexDir(Path.Combine(root, "Stock Game", "Data"));
+
+                var names = new List<string> { "Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm" };
+                var ccc = Path.Combine(root, "Stock Game", "Skyrim.ccc");
+                if (File.Exists(ccc)) names.AddRange(File.ReadLines(ccc).Select(l => l.Trim()).Where(l => l.Length > 0));
+                foreach (var line in File.ReadLines(Path.Combine(profileDir, "plugins.txt")))
+                    if (line.StartsWith("*")) names.Add(line.Substring(1).Trim());
+
+                var ordered = new List<(string, string)>();
+                var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var n in names)
+                    if (seenNames.Add(n) && located.TryGetValue(n, out var p)) ordered.Add((n, p));
+                return ordered;
+            }
+
+            // Form links held by properties whose name contains a word, single or listed. Read
+            // reflectively because Mutagen's property names move between versions, and a probe
+            // should never fail to build over a name.
+            static IEnumerable<(string prop, FormKey key)> DiagLinks(object owner, string nameContains)
+            {
+                foreach (var pi in owner.GetType().GetProperties())
+                {
+                    if (pi.GetIndexParameters().Length > 0) continue;
+                    if (pi.Name.IndexOf(nameContains, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    object? v;
+                    try { v = pi.GetValue(owner); } catch { continue; }
+                    if (v is IFormLinkGetter one && one.FormKeyNullable is FormKey k1 && !k1.IsNull)
+                        yield return (pi.Name, k1);
+                    else if (v is System.Collections.IEnumerable many && v is not string)
+                        foreach (var item in many)
+                            if (item is IFormLinkGetter l && l.FormKeyNullable is FormKey k2 && !k2.IsNull)
+                                yield return (pi.Name, k2);
+                }
+            }
+
+            // Every FormKey reachable from an object a few levels down - condition data hides its
+            // target behind wrapper shapes that differ per condition function.
+            static IEnumerable<FormKey> DiagFormKeys(object? o, int depth)
+            {
+                if (o == null || depth > 3) yield break;
+                foreach (var pi in o.GetType().GetProperties())
+                {
+                    if (pi.GetIndexParameters().Length > 0) continue;
+                    object? v;
+                    try { v = pi.GetValue(o); } catch { continue; }
+                    if (v == null) continue;
+                    if (v is FormKey fk) { yield return fk; continue; }
+                    if (!(v.GetType().Namespace ?? "").StartsWith("Mutagen")) continue;
+                    foreach (var k in DiagFormKeys(v, depth + 1)) yield return k;
+                }
+            }
+
+            // A record printed field by field, nested values indented. For record types whose
+            // layout has not been read before - packages, messages - so nothing is guessed.
+            static void DiagDump(object? o, string indent, int depth, Func<FormKey, string> named)
+            {
+                if (o == null || depth > 4) return;
+                foreach (var pi in o.GetType().GetProperties())
+                {
+                    if (pi.GetIndexParameters().Length > 0) continue;
+                    if (pi.Name.Contains("Registration") || pi.Name is "FormVersion" or "Version2" or "VersionControl"
+                        or "MajorRecordFlagsRaw" or "IsCompressed" or "IsDeleted" or "FormKey" or "EditorID") continue;
+                    object? v;
+                    try { v = pi.GetValue(o); } catch { continue; }
+                    if (v == null) continue;
+                    var t = v.GetType();
+                    if (t.Name.Contains("MemorySlice")) continue;
+                    if (v is string s) { Console.WriteLine($"{indent}{pi.Name} = \"{s}\""); continue; }
+                    if (v is IFormLinkGetter link)
+                    {
+                        if (link.FormKeyNullable is FormKey lk && !lk.IsNull) Console.WriteLine($"{indent}{pi.Name} -> {named(lk)}");
+                        continue;
+                    }
+                    if (t.IsPrimitive || t.IsEnum || (t.Namespace ?? "").StartsWith("System") && v is not System.Collections.IEnumerable)
+                    {
+                        Console.WriteLine($"{indent}{pi.Name} = {v}");
+                        continue;
+                    }
+                    if (v is System.Collections.IEnumerable items)
+                    {
+                        int idx = 0;
+                        foreach (var item in items)
+                        {
+                            if (idx >= 24) { Console.WriteLine($"{indent}{pi.Name}[...]"); break; }
+                            if (item == null) { idx++; continue; }
+                            var it = item.GetType();
+                            if (it.IsGenericType && it.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+                            {
+                                var key = it.GetProperty("Key")!.GetValue(item);
+                                var val = it.GetProperty("Value")!.GetValue(item);
+                                Console.WriteLine($"{indent}{pi.Name}[{key}] : {val?.GetType().Name}");
+                                DiagDump(val, indent + "    ", depth + 1, named);
+                            }
+                            else if (item is IFormLinkGetter il && il.FormKeyNullable is FormKey ik)
+                                Console.WriteLine($"{indent}{pi.Name}[{idx}] -> {named(ik)}");
+                            else if (it.IsPrimitive || it.IsEnum || item is string)
+                                Console.WriteLine($"{indent}{pi.Name}[{idx}] = {item}");
+                            else
+                            {
+                                Console.WriteLine($"{indent}{pi.Name}[{idx}] : {it.Name}");
+                                DiagDump(item, indent + "    ", depth + 1, named);
+                            }
+                            idx++;
+                        }
+                        continue;
+                    }
+                    if ((t.Namespace ?? "").StartsWith("Mutagen"))
+                    {
+                        Console.WriteLine($"{indent}{pi.Name} : {t.Name}");
+                        DiagDump(v, indent + "    ", depth + 1, named);
+                    }
+                }
+            }
+
+            // Which of a plugin's quests start with the game and own dialogue, set beside the
+            // plugin's SEQ file. Written to settle, from mods that already work, which quests a
+            // SEQ lists and how each id is encoded - instead of recalling it.
+            //   dotnet run -- seq <plugin-path>
+            if (args.Length > 1 && args[0] == "seq")
+            {
+                string pluginPath = args[1];
+                using var pl = SkyrimMod.CreateFromBinaryOverlay(pluginPath, SkyrimRelease.SkyrimSE);
+                Console.WriteLine($"{pl.ModKey} masters={pl.ModHeader.MasterReferences.Count}");
+                var topicsByQuest = pl.DialogTopics
+                    .GroupBy(d => d.Quest.FormKeyNullable ?? FormKey.Null)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                foreach (var q in pl.Quests.Where(q => q.FormKey.ModKey == pl.ModKey))
+                {
+                    topicsByQuest.TryGetValue(q.FormKey, out int owned);
+                    bool sge = q.Flags.HasFlag(Quest.Flag.StartGameEnabled);
+                    if (sge || owned > 0)
+                        Console.WriteLine($"  QUST {q.FormKey.ID:X6} {q.EditorID,-40} flags=0x{(int)q.Flags:X3} SGE={sge} topics={owned}");
+                }
+                var seqPath = Path.Combine(Path.GetDirectoryName(pluginPath)!, "SEQ", Path.GetFileNameWithoutExtension(pluginPath) + ".seq");
+                if (!File.Exists(seqPath)) { Console.WriteLine("  (SEQ 파일 없음)"); return; }
+                var raw = File.ReadAllBytes(seqPath);
+                for (int i = 0; i + 4 <= raw.Length; i += 4)
+                {
+                    uint v = BitConverter.ToUInt32(raw, i);
+                    Console.WriteLine($"  SEQ {v:X8}  fileIndex={v >> 24}  id={v & 0xFFFFFF:X6}");
+                }
+                return;
+            }
+
+            //   dotnet run -- mesg <formid-hex>
+            if (args.Length > 1 && args[0] == "mesg")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                uint mid = Convert.ToUInt32(args[1], 16);
+                var msg = esm.Messages.FirstOrDefault(x => x.FormKey.ID == mid);
+                if (msg == null) { Console.WriteLine("no such message"); return; }
+                Console.WriteLine($"MESG {msg.FormKey.ID:X6} {msg.EditorID}");
+                DiagDump(msg, "    ", 0, k => k.ToString());
+                return;
+            }
+
+            // Vanilla packages whose EditorID contains a word, every field printed.
+            //   dotnet run -- packs <keyword> [max]
+            if (args.Length > 1 && args[0] == "packs")
+            {
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var pcache = esm.ToImmutableLinkCache();
+                string PNamed(FormKey k) =>
+                    pcache.TryResolve<ISkyrimMajorRecordGetter>(k, out var r) ? $"{k.ID:X6} {r.EditorID}" : k.ToString();
+                int max = args.Length > 2 ? int.Parse(args[2]) : 6;
+                int shown = 0;
+                foreach (var pk in esm.Packages)
+                {
+                    if (pk.EditorID == null || pk.EditorID.IndexOf(args[1], StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    Console.WriteLine($"PACK {pk.FormKey.ID:X6} {pk.EditorID}");
+                    DiagDump(pk, "    ", 0, PNamed);
+                    if (++shown >= max) break;
+                }
+                Console.WriteLine($"  {shown} shown");
+                return;
+            }
+
+            // Everything in the active load order that decides where one placed actor goes:
+            // overrides of its base NPC (with the AI packages they leave it), and every quest
+            // alias that holds it - forced, unique-actor, or matched by a condition naming it -
+            // with the alias's packages and the quest priority that ranks them.
+            //   dotnet run -- actorai <placed-ref-hex>
+            if (args.Length > 1 && args[0] == "actorai")
+            {
+                var refKey = new FormKey(new ModKey("Skyrim", ModType.Master), Convert.ToUInt32(args[1], 16));
+                using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                    @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+                var acache = esm.ToImmutableLinkCache();
+                string ANamed(FormKey k) =>
+                    acache.TryResolve<ISkyrimMajorRecordGetter>(k, out var r) ? $"{k.ID:X6} {r.EditorID}" : k.ToString();
+
+                FormKey? baseKey = null;
+                foreach (var r in esm.EnumerateMajorRecords<IPlacedNpcGetter>())
+                    if (r.FormKey == refKey) { baseKey = r.Base.FormKeyNullable; break; }
+                Console.WriteLine($"ref {refKey} base={(baseKey is FormKey bk ? ANamed(bk) : "(not found)")}");
+
+                var order = DiagLoadOrder();
+                Console.WriteLine($"active plugins resolved: {order.Count}");
+                int failed = 0;
+                foreach (var (name, path) in order)
+                {
+                    try
+                    {
+                        using var pl = SkyrimMod.CreateFromBinaryOverlay(path, SkyrimRelease.SkyrimSE);
+                        if (baseKey is FormKey b)
+                            foreach (var npc in pl.Npcs)
+                            {
+                                if (npc.FormKey != b) continue;
+                                var packs = DiagLinks(npc, "Package").Select(x => $"{x.prop}:{ANamed(x.key)}");
+                                Console.WriteLine($"  NPC  [{name}] packages=[{string.Join(", ", packs)}]");
+                            }
+                        foreach (var q in pl.Quests)
+                            foreach (var al in q.Aliases)
+                            {
+                                string how = "";
+                                if (al.ForcedReference.FormKeyNullable == refKey) how = "forced";
+                                else if (baseKey != null && al.UniqueActor.FormKeyNullable == baseKey) how = "uniqueActor";
+                                else if (al.Conditions.Any(c => DiagFormKeys(c.Data, 0).Any(k => k == refKey || k == baseKey))) how = "condition";
+                                if (how == "") continue;
+                                var packs = DiagLinks(al, "Package").Select(x => $"{x.prop}:{ANamed(x.key)}");
+                                Console.WriteLine($"  QUST [{name}] {q.FormKey} {q.EditorID} prio={q.Priority} flags={q.Flags} alias {al.ID} {al.Name} ({how}) aliasFlags={al.Flags} packages=[{string.Join(", ", packs)}]");
+                            }
+                    }
+                    catch (Exception ex)
+                    {
+                        if (++failed <= 5) Console.WriteLine($"  (읽기 실패 {name}: {ex.GetType().Name} {ex.Message})");
+                    }
+                }
+                Console.WriteLine($"done, read failures={failed}");
+                return;
+            }
+
             if (args.Length > 1 && args[0] == "quest")
             {
                 using var esm = SkyrimMod.CreateFromBinaryOverlay(
@@ -1323,6 +1578,8 @@ namespace EspGenerator
             const uint IdLienFeePct      = 0x8E2;  // fee to release a lien, percent of the appraisal
             const uint IdGuarantorCredit = 0x8E3;  // loan credit granted by a housecarl guarantor
             const uint IdGuarantorPledgeBase = 0x8F0; // per hold: 0 none, 1 pledged, 2 claimed/defaulted
+            const uint IdGuarantorHoldQuest  = 0x940;  // holds a jailed guarantor in an alias
+            const uint IdGuarantorJailPackage = 0x941; // that alias's package: sandbox at the jail marker
 
             FormKey Id(uint value) => new FormKey(mod.ModKey, value);
             FormKey Vanilla(uint value) => new FormKey(new ModKey("Skyrim", ModType.Master), value);
@@ -1743,6 +2000,54 @@ namespace EspGenerator
             // Whiterun Housecarl (Lydia): placed reference ACHR 000A2C94.
             ObjProp("HousecarlWhiterun", Vanilla(0x0A2C94));
 
+            // ---- Guarantor hold ------------------------------------------------------
+            // A jailed guarantor is kept in the jail by AI, not by flags. MoveTo with
+            // SetDontMove and SetRestrained put Lydia at the marker, and she was later found
+            // back in Dragonsreach: her base sandbox package and the forced alias of Housecarls
+            // Pre-Thaneship (quest priority 0) still pointed there - `actorai 0A2C94`. A quest
+            // alias's packages outrank the actor's own, and among aliases the higher quest
+            // priority wins, so a running quest with one optional, empty alias holds her once
+            // Papyrus forces her into it. Start Game Enabled rather than started on arrest:
+            // filling and clearing an alias is instant, and Quest.Start() is latent.
+            //
+            // The package is vanilla's own jailed-NPC sandbox - Sabjorn's after TG03, a Sandbox
+            // template around a jail marker (`packs TG03SabjornPostQuestInJail`) - with its TG03
+            // condition removed and its marker swapped for Whiterun's prison marker 000267E4,
+            // persistent, in WhiterunDragonsreachBasement (`crimejail CrimeFactionWhiterun`).
+            // Should she be moved out while unloaded, this package is what brings her back.
+            using var templateSource = SkyrimMod.CreateFromBinaryOverlay(
+                @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+            var jailTemplate = templateSource.Packages.First(p => p.FormKey == Vanilla(0x101959));
+            var jailPackage = jailTemplate.Duplicate(Id(IdGuarantorJailPackage));
+            jailPackage.EditorID = "BankPrismGuarantorJailSandbox";
+            jailPackage.Conditions.Clear();
+            var jailTarget = new LocationTarget();
+            jailTarget.Link.SetTo(Vanilla(0x0267E4));
+            ((PackageDataLocation)jailPackage.Data[0]).Location =
+                new LocationTargetRadius { Target = jailTarget, Radius = 300 };
+            mod.Packages.Add(jailPackage);
+
+            var holdQuest = new Quest(Id(IdGuarantorHoldQuest), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = "BankPrismGuarantorHold",
+                Name = "Bank Prism Guarantor Hold",
+                Priority = 90,
+                Type = Quest.TypeEnum.None
+            };
+            holdQuest.Flags |= Quest.Flag.StartGameEnabled;
+            holdQuest.Flags |= (Quest.Flag)0x010;
+            var holdAlias = new QuestAlias
+            {
+                ID = 0,
+                Name = "JailedGuarantor",
+                Flags = QuestAlias.Flag.Optional
+            };
+            holdAlias.PackageData.Add(jailPackage.ToLinkGetter());
+            holdQuest.Aliases.Add(holdAlias);
+            holdQuest.NextAliasID = 1;
+            mod.Quests.Add(holdQuest);
+            ObjProp("GuarantorHold", holdQuest.FormKey);
+
             ObjProp("Gold001", Gold001);
 
             bankQuest.VirtualMachineAdapter = new QuestAdapter();
@@ -1945,6 +2250,252 @@ namespace EspGenerator
                 holds.Select(h => (h.name, Vanilla(h.crimeFaction))).ToArray(),
                 enabledHoldIndexes, Path.GetDirectoryName(outputPath)!);
             AssertFontCanDrawIt(outputPath);
+            AssertGuarantorHold(check, Path.GetDirectoryName(outputPath)!);
+            WriteAndCheckSeq(check, Path.GetDirectoryName(outputPath)!);
+            AssertPapyrusSourcesHaveBom(Path.GetDirectoryName(outputPath)!);
+        }
+
+        // A plugin whose Start Game Enabled quests carry dialogue needs an SEQ file. The
+        // Creation Kit writes one on save; nothing in this pipeline did. Without it the
+        // steward topic was missing from every game started straight after launching Skyrim
+        // (Papyrus.3.log and .0.log: OnInit is the first BankPrism line, no "은행 대화문 실행",
+        // while `reach:` reported the conditions met) and present whenever a save had been
+        // loaded earlier in the same session (.2.log, and .1.log even after a new game).
+        // The format was read off mods that ship one (`seq <plugin>`): every Start Game
+        // Enabled quest the plugin itself defines, dialogue or not, one uint32 each, the top
+        // byte being the plugin's own index after its masters.
+        static void WriteAndCheckSeq(ISkyrimModGetter plugin, string repoRoot)
+        {
+            var problems = new List<string>();
+            uint fileIndex = (uint)plugin.ModHeader.MasterReferences.Count;
+            var sge = plugin.Quests
+                .Where(q => q.FormKey.ModKey == plugin.ModKey && q.Flags.HasFlag(Quest.Flag.StartGameEnabled))
+                .Select(q => (key: q.FormKey, edid: q.EditorID))
+                .OrderBy(q => q.key.ID)
+                .ToList();
+            var bytes = sge.SelectMany(q => BitConverter.GetBytes((fileIndex << 24) | q.key.ID)).ToArray();
+
+            var seqDir = Path.Combine(repoRoot, "SEQ");
+            Directory.CreateDirectory(seqDir);
+            var seqPath = Path.Combine(seqDir, plugin.ModKey.Name + ".seq");
+            File.WriteAllBytes(seqPath, bytes);
+
+            Console.WriteLine();
+            Console.WriteLine($"--- SEQ: {seqPath} ---");
+            foreach (var q in sge)
+                Console.WriteLine($"  {(fileIndex << 24) | q.key.ID:X8}  {q.edid}");
+
+            if (!File.ReadAllBytes(seqPath).SequenceEqual(bytes))
+                problems.Add("SEQ 파일을 다시 읽은 내용이 쓴 내용과 다르다");
+            var listed = sge.Select(q => q.key).ToHashSet();
+            foreach (var questKey in plugin.DialogTopics.Select(d => d.Quest.FormKeyNullable).OfType<FormKey>().Distinct())
+                if (!listed.Contains(questKey))
+                    problems.Add($"대화문을 가진 퀘스트 {questKey} 가 SEQ에 없다 (Start Game Enabled가 아니거나 다른 플러그인 소속)");
+            if (!sge.Any(q => q.edid == "BankPrismQuest"))
+                problems.Add("BankPrismQuest가 SEQ에 없다");
+
+            Console.WriteLine();
+            if (problems.Count == 0)
+            {
+                Console.WriteLine("--- SEQ 검사: 통과 (deploy.ps1이 SEQ 폴더째 배포한다) ---");
+                return;
+            }
+            Console.WriteLine("--- SEQ 검사: 실패 ---");
+            foreach (var p in problems) Console.WriteLine("  " + p);
+            Environment.ExitCode = 1;
+        }
+
+        // Everything a jailed guarantor's hold depends on, read back off the written file and
+        // Skyrim.esm. Any one of these failing looks the same in game - Lydia is not in the
+        // jail - and reports nothing anywhere.
+        static void AssertGuarantorHold(ISkyrimModGetter plugin, string repoRoot)
+        {
+            var problems = new List<string>();
+            var skyrim = new ModKey("Skyrim", ModType.Master);
+            var marker = new FormKey(skyrim, 0x0267E4);
+            var jailCell = new FormKey(skyrim, 0x04A376);
+            var sandboxTemplate = new FormKey(skyrim, 0x01C254);
+
+            var quest = plugin.Quests.FirstOrDefault(q => q.EditorID == "BankPrismGuarantorHold");
+            FormKey? packageKey = null;
+            if (quest == null)
+            {
+                problems.Add("BankPrismGuarantorHold 퀘스트가 없다");
+            }
+            else
+            {
+                if (!quest.Flags.HasFlag(Quest.Flag.StartGameEnabled))
+                    problems.Add("구금 퀘스트가 Start Game Enabled가 아니다 - 돌지 않는 퀘스트의 별칭은 채워지지 않는다");
+                if (quest.Flags.HasFlag(Quest.Flag.RunOnce))
+                    problems.Add("구금 퀘스트가 Run Once다");
+                // Lydia is held elsewhere by Housecarls Pre-Thaneship at 0 and by Extended
+                // Encounters at 40 and 50 (`actorai 0A2C94`); the higher quest priority wins.
+                if (quest.Priority <= 50)
+                    problems.Add($"구금 퀘스트 우선순위 {quest.Priority} - 리디아를 쥐는 다른 별칭(최대 50)보다 높아야 한다");
+                if (quest.Aliases.Count != 1)
+                    problems.Add($"구금 퀘스트 별칭이 {quest.Aliases.Count}개 - Papyrus는 GetAlias(0) 하나만 쓴다");
+                else
+                {
+                    var al = quest.Aliases[0];
+                    if (al.ID != 0)
+                        problems.Add($"구금 별칭 ID가 {al.ID} - Papyrus는 GetAlias(0)을 쓴다");
+                    if (!$"{al.Flags}".Contains("Optional"))
+                        problems.Add("구금 별칭이 Optional이 아니다 - 빈 채로는 퀘스트가 시작되지 않는다");
+                    if (al.ForcedReference.FormKeyNullable != null || al.UniqueActor.FormKeyNullable != null)
+                        problems.Add("구금 별칭이 처음부터 누군가를 가리킨다");
+                    var packs = al.PackageData.Select(l => l.FormKey).ToList();
+                    if (packs.Count != 1)
+                        problems.Add($"구금 별칭의 패키지가 {packs.Count}개 - 감옥 샌드박스 하나여야 한다");
+                    else
+                        packageKey = packs[0];
+                }
+            }
+
+            var pkg = packageKey is FormKey pk ? plugin.Packages.FirstOrDefault(p => p.FormKey == pk) : null;
+            if (pkg == null)
+            {
+                problems.Add("구금 별칭의 패키지를 플러그인에서 찾지 못했다");
+            }
+            else
+            {
+                if (pkg.PackageTemplate.FormKeyNullable != sandboxTemplate)
+                    problems.Add($"구금 패키지 템플릿이 {pkg.PackageTemplate.FormKeyNullable} - Sandbox(01C254)여야 한다");
+                if (pkg.Conditions.Count != 0)
+                    problems.Add($"구금 패키지에 조건이 {pkg.Conditions.Count}개 남아 있다 - 원본의 TG03 조건이면 패키지가 꺼진다");
+                if (pkg.Data.TryGetValue(0, out var first) && first is IPackageDataLocationGetter loc
+                    && loc.Location.Target is ILocationTargetGetter target && target.Link.FormKey == marker)
+                    Console.WriteLine($"  구금 패키지 {pkg.EditorID}: 감옥 마커 {marker.ID:X6} 반경 {loc.Location.Radius}");
+                else
+                    problems.Add("구금 패키지의 위치가 화이트런 감옥 마커 000267E4가 아니다");
+            }
+
+            var bank = plugin.Quests.FirstOrDefault(q => q.EditorID == "BankPrismQuest");
+            var bound = bank?.VirtualMachineAdapter?.Scripts.SelectMany(s => s.Properties)
+                .OfType<IScriptObjectPropertyGetter>().FirstOrDefault(p => p.Name == "GuarantorHold");
+            if (quest != null && bound?.Object.FormKeyNullable != quest.FormKey)
+                problems.Add("컨트롤러 프로퍼티 GuarantorHold가 구금 퀘스트에 묶여 있지 않다");
+            var psc = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Source", "BankPrismController.psc"));
+            if (!psc.Contains("Quest Property GuarantorHold Auto"))
+                problems.Add("BankPrismController.psc에 GuarantorHold 프로퍼티 선언이 없다 - ESP 바인딩이 버려진다");
+            if (!psc.Contains("0x0004A376"))
+                problems.Add("BankPrismController.psc가 감옥 셀 0004A376을 쓰지 않는다 - 이탈 판정 기준이 이 검사와 다르다");
+
+            // Papyrus compares Lydia's cell with 0004A376 to tell "in jail" from "escaped", and
+            // lets a released guarantor out at the prison marker plus GuarantorReleaseOffsetX/Y/Z.
+            // That point has to be the corridor by the jail guard post: inside a cell she is
+            // locked in again, and inside a wall she is stuck while the log says "released".
+            using var esm = SkyrimMod.CreateFromBinaryOverlay(
+                @"C:/TAKEALOOK/Stock Game/Data/Skyrim.esm", SkyrimRelease.SkyrimSE);
+            var ecache = esm.ToImmutableLinkCache();
+            var cellDoorBase = new FormKey(skyrim, 0x0A7613);                                              // WRJailDoor01
+            var jailGuardBases = new[] { new FormKey(skyrim, 0x0590DE), new FormKey(skyrim, 0x05EAB5) }; // Imperial, Sons jail guards
+            (float x, float y, float z)? markerAt = null;
+            var cellDoors = new List<(float x, float y, float z)>();
+            var jailGuards = new List<(float x, float y, float z)>();
+            ICellGetter? CellOf(Mutagen.Bethesda.Plugins.Cache.IModContext ctx)
+            {
+                var parent = ctx.Parent;
+                while (parent != null && parent.Record is not ICellGetter) parent = parent.Parent;
+                return parent?.Record as ICellGetter;
+            }
+            foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedObject, IPlacedObjectGetter>(ecache))
+            {
+                var at = ctx.Record.Placement?.Position;
+                if (ctx.Record.FormKey == marker)
+                {
+                    var cellRec = CellOf(ctx);
+                    bool persistent = (ctx.Record.MajorRecordFlagsRaw & 0x400) != 0;
+                    Console.WriteLine($"  감옥 마커 {marker.ID:X6}: {cellRec?.EditorID} {cellRec?.FormKey.ID:X6} persistent={persistent}");
+                    if (cellRec?.FormKey != jailCell)
+                        problems.Add($"감옥 마커가 {cellRec?.EditorID} 에 있다 - Papyrus가 감옥 셀로 비교하는 04A376이 아니다");
+                    if (!persistent)
+                        problems.Add("감옥 마커가 퍼시스턴트가 아니다 - 셀이 로드되지 않으면 Papyrus에서 None이 된다");
+                    if (at is { } m) markerAt = (m.X, m.Y, m.Z);
+                }
+                else if (ctx.Record.Base.FormKeyNullable == cellDoorBase && at is { } d && CellOf(ctx)?.FormKey == jailCell)
+                {
+                    cellDoors.Add((d.X, d.Y, d.Z));
+                }
+            }
+            foreach (var ctx in esm.EnumerateMajorRecordContexts<IPlacedNpc, IPlacedNpcGetter>(ecache))
+            {
+                if (ctx.Record.Base.FormKeyNullable is FormKey guardBase && jailGuardBases.Contains(guardBase)
+                    && ctx.Record.Placement?.Position is { } g && CellOf(ctx)?.FormKey == jailCell)
+                    jailGuards.Add((g.X, g.Y, g.Z));
+            }
+
+            if (markerAt is not { } mk)
+            {
+                problems.Add("Skyrim.esm에서 감옥 마커 000267E4를 찾지 못했다");
+            }
+            else
+            {
+                float? Offset(string axis)
+                {
+                    var hit = System.Text.RegularExpressions.Regex.Match(psc,
+                        @"Float Function GuarantorReleaseOffset" + axis + @"\(\)\s*Return\s+(-?\d+(?:\.\d+)?)");
+                    return hit.Success ? float.Parse(hit.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+                }
+                var ox = Offset("X");
+                var oy = Offset("Y");
+                var oz = Offset("Z");
+                if (ox == null || oy == null || oz == null)
+                {
+                    problems.Add("BankPrismController.psc에서 GuarantorReleaseOffsetX/Y/Z를 읽지 못했다");
+                }
+                else if (jailGuards.Count == 0 || cellDoors.Count == 0)
+                {
+                    problems.Add($"감옥 경비({jailGuards.Count}명)나 감방 문({cellDoors.Count}개)을 찾지 못해 석방 위치를 검사할 수 없다");
+                }
+                else
+                {
+                    var land = (x: mk.x + ox.Value, y: mk.y + oy.Value, z: mk.z + oz.Value);
+                    double Flat((float x, float y, float z) p) => Math.Sqrt(Math.Pow(p.x - land.x, 2) + Math.Pow(p.y - land.y, 2));
+                    double toGuard = jailGuards.Min(p => Flat(p));
+                    double toDoor = cellDoors.Min(p => Flat(p));
+                    double rise = Math.Abs(land.z - jailGuards.Average(p => p.z));
+                    Console.WriteLine($"  석방 위치 {land.x:F0},{land.y:F0},{land.z:F0}: 감옥 경비까지 {toGuard:F0}, 감방 문까지 {toDoor:F0}, 경비 발밑과 높이 차 {rise:F0} (경비 {jailGuards.Count}명, 감방 문 {cellDoors.Count}개)");
+                    if (toGuard > 200)
+                        problems.Add($"석방 위치가 감옥 경비 초소에서 {toGuard:F0} 떨어져 있다 - 복도가 아닐 수 있다 (200 이하)");
+                    if (toDoor < 300)
+                        problems.Add($"석방 위치가 감방 문에서 {toDoor:F0} - 감방 안일 수 있다 (300 이상)");
+                    if (rise > 64)
+                        problems.Add($"석방 위치 높이가 경비 발밑과 {rise:F0} 차이 난다 - 바닥 위가 아니다 (64 이하)");
+                }
+            }
+
+            Console.WriteLine();
+            if (problems.Count == 0)
+            {
+                Console.WriteLine("--- 보증인 구금 검사: 통과 ---");
+                return;
+            }
+            Console.WriteLine("--- 보증인 구금 검사: 실패 ---");
+            foreach (var p in problems) Console.WriteLine("  " + p);
+            Environment.ExitCode = 1;
+        }
+
+        // A Papyrus source saved without its BOM still compiles, and every Korean string in it
+        // comes out as unrelated CJK characters. Editors and tools drop a BOM without saying so.
+        static void AssertPapyrusSourcesHaveBom(string repoRoot)
+        {
+            var missing = Directory.GetFiles(Path.Combine(repoRoot, "Scripts", "Source"), "*.psc")
+                .Where(f =>
+                {
+                    var head = File.ReadAllBytes(f);
+                    return !(head.Length >= 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF);
+                })
+                .Select(Path.GetFileName)
+                .ToList();
+            Console.WriteLine();
+            if (missing.Count == 0)
+            {
+                Console.WriteLine("--- Papyrus 소스 BOM 검사: 통과 ---");
+                return;
+            }
+            Console.WriteLine("--- Papyrus 소스 BOM 검사: 실패 ---");
+            foreach (var f in missing) Console.WriteLine($"  {f}: UTF-8 BOM 없음 - 컴파일은 되지만 한글이 깨진다");
+            Environment.ExitCode = 1;
         }
 
         // The other eight holds are hidden by dialogue condition, and a condition that

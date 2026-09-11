@@ -75,6 +75,19 @@ are easy to get wrong here and are deliberately handled in code:
   `?`. Strings are written as UTF-8, matching the Korean translation mods in
   this setup.
 
+The generator also writes `SEQ/BankPrismUI.seq`, which lists the plugin's Start Game
+Enabled quests. The Creation Kit writes this file when it saves a plugin. Without it, the
+steward topic is missing from any game started straight after launching Skyrim. The
+build exits non-zero, and nothing should be deployed, when any of its checks fail. The
+checks cover:
+
+- the SEQ file
+- the guarantor hold quest, its alias package and the jail marker's cell
+- the dialogue invariants
+- which NPCs each topic reaches
+- the game font
+- the UTF-8 BOM on every Papyrus source
+
 ### 2. Papyrus scripts
 
 ```
