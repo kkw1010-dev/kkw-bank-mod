@@ -136,7 +136,7 @@ window.bankAction(payload)
   이유를 확인할 방법이 없다. 현재 쓰는 이름은 다음과 같다:
   - 배경 `bg/<holdKey>.jpg`
   - 문양 `emblems/<holdKey>.png`
-  - 행정관 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
+  - 야를(영주) 초상화 `portraits/<holdKey>-t<단계>.jpg` (1~5)
   - 잡화상 초상화 `portraits/merchant-<holdKey>-t<단계>.jpg` (1~5)
   - 보증인 초상화 `portraits/guarantor-<holdKey>-<상태>.jpg`. 상태는 `default`(보증 전), `pledge`(창을 연 채
     방금 보증을 세움), `pledged`(보증 중 · 구상권 청구 후 연행 전), `jailed`(구금 중 · 석방 절차 중)다.

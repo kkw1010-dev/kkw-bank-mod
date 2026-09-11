@@ -1396,14 +1396,14 @@
 
           <div class="steward-slot">
 
-            <!-- 3. 대출/신용등급 탭 전용: 신용등급 5단계 프로벤투스 초상화 및 한줄 대사 -->
+            <!-- 3. 대출/신용등급 탭 전용: 신용등급 5단계 야를 발그루프 초상화 및 한줄 대사 -->
             <div class="portrait-view" id="right-loan">
               <div class="portrait-img-wrap">
-                <img id="portraitImg" class="portrait-img" src="portraits/whiterun-t2.jpg" alt="행정관 초상화">
+                <img id="portraitImg" class="portrait-img" src="portraits/whiterun-t2.jpg" alt="영주 초상화">
               </div>
               <div class="portrait-info">
-                <div class="portrait-dialogue" id="portraitQuote">"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."</div>
-                <div class="portrait-speaker" id="portraitSpeaker">프로벤투스 아베니치</div>
+                <div class="portrait-dialogue" id="portraitQuote">"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."</div>
+                <div class="portrait-speaker" id="portraitSpeaker">야를 발그루프</div>
               </div>
             </div>
 
@@ -1950,9 +1950,19 @@
   var HOLD_KEYS = ['whiterun', 'haafingar', 'eastmarch', 'rift', 'reach',
                    'falkreath', 'hjaalmarch', 'pale', 'winterhold'];
 
-  /* Stewards whose portraits have been drawn. Any other hold borrows Whiterun's
+  /* Jarls whose portraits have been drawn. Any other hold borrows Whiterun's
      art and is addressed by office rather than by name. */
-  var STEWARDS = { whiterun: '프로벤투스 아베니치' };
+  var JARLS = { whiterun: '야를 발그루프' };
+  var STEWARDS = JARLS;
+
+  /* Balgruuf's dialogue per credit tier in Whiterun */
+  var BALGRUUF_QUOTES = {
+    1: '"지금은 온 영지에 드래곤의 위협이 도사리는 비상시국이네. 신원도 증명되지 않은 외지인에게 화이트런의 금고를 열어줄 만큼 내 마음이 한가롭지 않다네. 융자 용건이라면 행정관과 알아서 해결하게."',
+    2: '"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."',
+    3: '"오, 화이트런의 종사여! 그대가 우리 영지를 위해 보여준 헌신은 내 이미 다 확인했네. 5,000 골드의 융자 자금은 그대의 명예에 비하면 아무것도 아니지. 편히 융통하게나."',
+    4: '"그대의 이름은 이미 드래곤즈리치의 벽을 흔들고 있네, 스카이림의 영웅이여! 그대와 같은 강자를 아군으로 둔 것은 화이트런 최고의 축복이지. 12,000 골드의 자금은 내 명으로 즉시 승인하겠네."',
+    5: '"탐리엘의 구원자이자, 나의 영원한 형제여! 그대가 세상을 파멸에서 구했거늘, 화이트런의 금고가 어찌 그대의 요구를 거절하겠는가? 25,000 골드든 그 이상이든, 필요한 만큼 전부 가져가 영광스럽게 쓰게나."'
+  };
 
   /* How a hold names the Jarl's seat. The shared strings speak of "야를의 금고" and
      "궁정" so any hold reads correctly; a hold listed here names its own seat instead.
@@ -1970,7 +1980,7 @@
       },
       grade: {
         '요르바스크의 전사': '"요르바스크의 명예로운 동료이자 용맹한 전사여. 그 강인한 기백은 드래곤스리치 금고보다도 든든한 신용 보증서라네."',
-        '탐리엘의 구원자': '"오, 탐리엘의 구원자이시여! 드래곤스리치 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."'
+        '탐리엘의 구원자': '"탐리엘의 구원자이자, 나의 영원한 형제여! 그대가 세상을 파멸에서 구했거늘, 화이트런의 금고가 어찌 그대의 요구를 거절하겠는가? 25,000 골드든 그 이상이든, 필요한 만큼 전부 가져가 영광스럽게 쓰게나."'
       }
     }
   };
@@ -1986,17 +1996,17 @@
   var GRADE_DATA = {
     '외지인': {
       pathKey: '',
-      quote: '"신원도 불확실한 외지인에게 내줄 금화는 없네. 장난칠 생각 말고 당장 물러서게."',
+      quote: '"지금은 온 영지에 드래곤의 위협이 도사리는 비상시국이네. 신원도 증명되지 않은 외지인에게 화이트런의 금고를 열어줄 만큼 내 마음이 한가롭지 않다네. 융자 용건이라면 행정관과 알아서 해결하게."',
       classType: 'bad'
     },
     '정체모를 용병': {
       pathKey: '',
-      quote: '"용건은 대충 짐작이 가네만… 업무로 바쁘니 외상 상환만 끝내고 빨리 가게."',
+      quote: '"내 영지에서 구슬땀을 흘리는 용병이군. 하지만 장부는 철저히 프로벤투스가 관리하고 있네. 그대의 가치를 더 증명하기 전까진 내게서 특별한 무담보 조치를 기대하진 말게나."',
       classType: 'mid'
     },
     '영지의 종사': {
       pathKey: 'path-3-thane',
-      quote: '"아, 우리 영지의 정식 종사(Thane)이신 분이군요. 야를의 특별 보증 범위 안에서 정중히 모시겠습니다."',
+      quote: '"오, 화이트런의 종사여! 그대가 우리 영지를 위해 보여준 헌신은 내 이미 다 확인했네. 5,000 골드의 융자 자금은 그대의 명예에 비하면 아무것도 아니지. 편히 융통하게나."',
       classType: 'good'
     },
     '신뢰받는 해결사': {
@@ -2006,7 +2016,7 @@
     },
     '스카이림의 영웅': {
       pathKey: 'path-4-mq',
-      quote: '"스카이림의 영웅을 맞이하게 되어 영광입니다. 야를의 뜻에 따라 원하시는 자금을 즉시 마련해 드리지요."',
+      quote: '"그대의 이름은 이미 드래곤즈리치의 벽을 흔들고 있네, 스카이림의 영웅이여! 그대와 같은 강자를 아군으로 둔 것은 화이트런 최고의 축복이지. 12,000 골드의 자금은 내 명으로 즉시 승인하겠네."',
       classType: 'good'
     },
     '요르바스크의 전사': {
@@ -2026,7 +2036,7 @@
     },
     '탐리엘의 구원자': {
       pathKey: 'path-5-mq',
-      quote: '"오, 탐리엘의 구원자이시여! 영지의 금고를 통째로 비워드려도 아깝지 않으니, 부디 필요한 만큼 거두어 가소서."',
+      quote: '"탐리엘의 구원자이자, 나의 영원한 형제여! 그대가 세상을 파멸에서 구했거늘, 화이트런의 금고가 어찌 그대의 요구를 거절하겠는가? 25,000 골드든 그 이상이든, 필요한 만큼 전부 가져가 영광스럽게 쓰게나."',
       classType: 'good'
     },
     '컴패니언의 인도자': {
@@ -2082,7 +2092,7 @@
     var artEl = document.getElementById('art');
     if (artEl) { artEl.style.backgroundImage = "url('bg/" + holdKey + ".jpg')"; }
 
-    setText('portraitSpeaker', STEWARDS[holdKey] || (holdName + ' 행정관'));
+    setText('portraitSpeaker', JARLS[holdKey] || (holdName + ' 야를'));
     if (typeof updateMerchantPortrait === 'function') {
       updateMerchantPortrait(state.grade, state.tier);
     }
@@ -2103,8 +2113,14 @@
       imgEl.src = 'portraits/' + state.holdKey + '-t' + tier + '.jpg';
     }
 
-    var seatGrade = (SEAT_TEXT[state.holdKey] || {}).grade || {};
-    setText('portraitQuote', seatGrade[gradeName] || info.quote);
+    var quote = '';
+    if (state.holdKey === 'whiterun' && BALGRUUF_QUOTES[tier]) {
+      quote = BALGRUUF_QUOTES[tier];
+    } else {
+      var seatGrade = (SEAT_TEXT[state.holdKey] || {}).grade || {};
+      quote = seatGrade[gradeName] || info.quote;
+    }
+    setText('portraitQuote', quote);
 
     var badgeEl = document.getElementById('stewardBadge');
     if (badgeEl) {
